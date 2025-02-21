@@ -3,54 +3,25 @@ import tempfile
 import os
 import zipfile
 import time
-from playwright.sync_api import sync_playwright
+import asyncio
+from pyppeteer import launch
 import re
 import random
 from PIL import Image
-import subprocess
-
-def install_playwright_deps():
-    """Instala las dependencias necesarias de Playwright"""
-    try:
-        # Instalar solo el navegador chromium
-        subprocess.run(['playwright', 'install', 'chromium', '--with-deps'], check=True)
-        return True
-    except Exception as e:
-        st.error(f"Error installing Playwright dependencies: {str(e)}")
-        return False
 
 @st.cache_resource
-def get_playwright():
-    """Inicializa Playwright y asegura que los navegadores estén instalados"""
-    install_playwright_deps()
-    return sync_playwright().start()
+def get_event_loop():
+    """Obtiene o crea un event loop para asyncio"""
+    try:
+        return asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop
 
-def setup_browser(device_type, custom_width=None, custom_height=None):
+async def setup_browser(device_type, custom_width=None, custom_height=None):
     """Configura y retorna un navegador con las opciones especificadas"""
     try:
-        playwright = get_playwright()
-        
-        # Configurar opciones del navegador
-        browser_options = {
-            "chromium_sandbox": False,  # Deshabilitar sandbox para entornos sin privilegios
-            "args": [
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-accelerated-2d-canvas",
-                "--disable-gpu",
-                "--disable-extensions",
-                "--disable-web-security",
-                "--disable-features=site-per-process",
-                "--disable-software-rasterizer"
-            ]
-        }
-        
-        browser = playwright.chromium.launch(
-            headless=True,  # Asegurar modo headless
-            **browser_options
-        )
-        
         # Configuraciones de dispositivo
         device_profiles = {
             "desktop": {"width": 1920, "height": 1080},
@@ -63,42 +34,41 @@ def setup_browser(device_type, custom_width=None, custom_height=None):
         width = device_profiles[device_type]["width"]
         height = device_profiles[device_type]["height"]
         
-        context = browser.new_context(
-            viewport={'width': width, 'height': height},
-            ignore_https_errors=True  # Ignorar errores HTTPS
+        # Configurar opciones del navegador
+        browser = await launch(
+            headless=True,
+            args=[
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                f'--window-size={width},{height}'
+            ],
+            ignoreHTTPSErrors=True,
+            handleSIGINT=False,
+            handleSIGTERM=False,
+            handleSIGHUP=False
         )
         
-        return context, browser, width, height
+        page = await browser.newPage()
+        await page.setViewport({'width': width, 'height': height})
+        
+        return browser, page, width, height
     except Exception as e:
         st.error(f"Error setting up browser: {str(e)}")
         raise e
 
-def sanitize_filename(url):
-    # Eliminar el protocolo (http:// o https://)
-    url = re.sub(r'^https?://', '', url)
-    # Eliminar caracteres no válidos para nombres de archivo
-    url = re.sub(r'[<>:"/\\|?*]', '_', url)
-    # Limitar la longitud del nombre del archivo
-    return url[:50]
-
-def capture_screenshot(context, url, output_path, width, height):
+async def capture_screenshot(page, url, output_path, width, height):
     """Captura un screenshot de la URL especificada"""
-    page = None
     try:
-        # Crear nueva página
-        page = context.new_page()
-        
         # Navegar a la URL
-        page.goto(url, wait_until='networkidle')
+        await page.goto(url, {'waitUntil': 'networkidle0', 'timeout': 30000})
         
         # Esperar un poco más para contenido dinámico
-        page.wait_for_timeout(2000)
-        
-        # Ajustar tamaño para captura completa
-        page.set_viewport_size({"width": width, "height": height})
+        await asyncio.sleep(2)
         
         # Obtener altura total de la página
-        total_height = page.evaluate("""
+        total_height = await page.evaluate("""
             Math.max(
                 document.body.scrollHeight,
                 document.documentElement.scrollHeight,
@@ -110,13 +80,13 @@ def capture_screenshot(context, url, output_path, width, height):
         """)
         
         # Ajustar viewport para captura completa
-        page.set_viewport_size({"width": width, "height": total_height})
+        await page.setViewport({"width": width, "height": total_height})
         
         # Asegurar que el directorio existe
         os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else '.', exist_ok=True)
         
         # Tomar screenshot
-        page.screenshot(path=output_path, full_page=True)
+        await page.screenshot({'path': output_path, 'fullPage': True})
         
         # Verificar que el archivo se creó correctamente
         if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
@@ -128,9 +98,14 @@ def capture_screenshot(context, url, output_path, width, height):
     except Exception as e:
         st.error(f"Error capturing screenshot: {str(e)}")
         return False
-    finally:
-        if page:
-            page.close()
+
+def sanitize_filename(url):
+    # Eliminar el protocolo (http:// o https://)
+    url = re.sub(r'^https?://', '', url)
+    # Eliminar caracteres no válidos para nombres de archivo
+    url = re.sub(r'[<>:"/\\|?*]', '_', url)
+    # Limitar la longitud del nombre del archivo
+    return url[:50]
 
 def get_loading_message():
     """Retorna un mensaje aleatorio divertido durante la carga"""
@@ -241,6 +216,9 @@ https://www.another-example.com
             total_captures = len([url for url in urls if url.strip()]) * len(devices)
             current_capture = 0
             
+            # Obtener el event loop
+            loop = get_event_loop()
+            
             for url in urls:
                 if not url.strip():
                     continue
@@ -257,16 +235,23 @@ https://www.another-example.com
                         progress_container.progress(progress)
                         message_container.info(get_loading_message())
                         
-                        context, browser, width, height = setup_browser(device, custom_width, custom_height)
+                        # Configurar navegador y capturar screenshot
+                        browser, page, width, height = loop.run_until_complete(
+                            setup_browser(device, custom_width, custom_height)
+                        )
+                        
                         safe_filename = sanitize_filename(url)
                         output_path = os.path.join(temp_dir, f"{safe_filename}_{device}.png")
                         
-                        if capture_screenshot(context, url, output_path, width, height):
+                        success = loop.run_until_complete(
+                            capture_screenshot(page, url, output_path, width, height)
+                        )
+                        
+                        if success:
                             screenshot_paths.append(output_path)
-                            
-                        # Cerrar el contexto y el navegador
-                        context.close()
-                        browser.close()
+                        
+                        # Cerrar navegador
+                        loop.run_until_complete(browser.close())
                             
                     except Exception as e:
                         st.error(f"Error capturing {url} ({device}): {str(e)}")
