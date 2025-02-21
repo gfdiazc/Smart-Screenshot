@@ -39,10 +39,10 @@ def setup_driver(device_type, custom_width=None, custom_height=None):
         chrome_options.add_argument('--disable-extensions')
         chrome_options.add_argument('--disable-infobars')
         chrome_options.add_argument('--disable-notifications')
-        chrome_options.binary_location = '/usr/bin/chromium-browser'
+        chrome_options.binary_location = '/usr/bin/chromium'
         
         # Configurar el servicio de Chrome
-        service = Service('/usr/lib/chromium-browser/chromedriver')
+        service = Service('/usr/bin/chromedriver')
         
         # Inicializar el driver
         driver = webdriver.Chrome(service=service, options=chrome_options)
