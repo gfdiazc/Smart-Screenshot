@@ -34,6 +34,9 @@ def setup_driver():
     options.add_argument('--disable-infobars')
     options.add_argument('--disable-notifications')
     
+    # Set Chrome binary path for Streamlit Cloud
+    options.binary_location = '/usr/bin/chromium'
+    
     # Random user agent
     ua = UserAgent()
     user_agent = ua.random
@@ -49,7 +52,15 @@ def setup_driver():
     options.add_experimental_option('excludeSwitches', ['enable-automation'])
     options.add_experimental_option('useAutomationExtension', False)
     
-    driver = webdriver.Chrome(options=options)
+    # Additional options for stability
+    options.add_argument('--disable-extensions')
+    options.add_argument('--disable-software-rasterizer')
+    options.add_argument('--ignore-certificate-errors')
+    options.add_argument('--allow-running-insecure-content')
+    
+    # Create driver with service
+    service = Service('/usr/bin/chromedriver')
+    driver = webdriver.Chrome(service=service, options=options)
     
     # Apply stealth settings
     stealth(driver,
