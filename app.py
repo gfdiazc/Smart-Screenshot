@@ -3,13 +3,14 @@ import tempfile
 import os
 import zipfile
 import time
-from selenium import webdriver
+from seleniumwire import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from PIL import Image
 import re
@@ -24,49 +25,55 @@ def sanitize_filename(url):
     return url[:50]
 
 def setup_driver(device_type, custom_width=None, custom_height=None):
-    # Configuración de Chrome Options
-    chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--disable-infobars")
-    chrome_options.add_argument("--disable-notifications")
-    chrome_options.add_argument("--disable-popup-blocking")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    
-    # Configuraciones de dispositivo
-    device_profiles = {
-        "desktop": {"width": 1920, "height": 1080},
-        "mobile": {"width": 375, "height": 812},
-        "tablet": {"width": 768, "height": 1024},
-        "custom": {"width": custom_width, "height": custom_height}
-    }
-    
-    # Obtener dimensiones del dispositivo
-    width = device_profiles[device_type]["width"]
-    height = device_profiles[device_type]["height"]
-    
-    if device_type != "custom":
-        chrome_options.add_argument(f"--window-size={width},{height}")
-    else:
-        chrome_options.add_argument(f"--window-size={custom_width},{custom_height}")
-    
+    """Configura y retorna un webdriver de Chrome con las opciones especificadas"""
     try:
-        # Intentar usar undetected-chromedriver
-        import undetected_chromedriver as uc
-        driver = uc.Chrome(options=chrome_options)
+        # Configuración de Chrome Options
+        chrome_options = Options()
+        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--disable-infobars")
+        chrome_options.add_argument("--disable-notifications")
+        chrome_options.add_argument("--disable-popup-blocking")
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--disable-software-rasterizer")
+        
+        # Configuraciones de dispositivo
+        device_profiles = {
+            "desktop": {"width": 1920, "height": 1080},
+            "mobile": {"width": 375, "height": 812},
+            "tablet": {"width": 768, "height": 1024},
+            "custom": {"width": custom_width, "height": custom_height}
+        }
+        
+        # Obtener dimensiones del dispositivo
+        width = device_profiles[device_type]["width"]
+        height = device_profiles[device_type]["height"]
+        
+        if device_type != "custom":
+            chrome_options.add_argument(f"--window-size={width},{height}")
+        else:
+            chrome_options.add_argument(f"--window-size={custom_width},{custom_height}")
+        
+        # Configurar selenium-wire
+        seleniumwire_options = {
+            'verify_ssl': False,  # No verificar certificados SSL
+            'suppress_connection_errors': True  # Suprimir errores de conexión
+        }
+        
+        # Inicializar el driver con selenium-wire
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(
+            service=service,
+            options=chrome_options,
+            seleniumwire_options=seleniumwire_options
+        )
+        
+        return driver, width, height
     except Exception as e:
-        st.error(f"Error with undetected-chromedriver: {str(e)}")
-        try:
-            # Fallback a selenium normal
-            from selenium.webdriver.chrome.service import Service
-            from webdriver_manager.chrome import ChromeDriverManager
-            service = Service(ChromeDriverManager().install())
-            driver = webdriver.Chrome(service=service, options=chrome_options)
-        except Exception as e:
-            st.error(f"Error with regular selenium: {str(e)}")
-            raise e
-    
-    return driver, width, height
+        st.error(f"Error setting up Chrome driver: {str(e)}")
+        raise e
 
 # Validate URLs
 def validate_url(url):
@@ -233,53 +240,72 @@ def handle_popups(driver):
     time.sleep(1)
 
 def capture_screenshot(driver, url, output_path, width, height):
+    """Captura un screenshot de la URL especificada"""
     try:
+        # Configurar el tamaño de la ventana
         driver.set_window_size(width, height)
+        
+        # Cargar la página
         driver.get(url)
-
-        # Wait for the page to load fully
-        time.sleep(5)  # Aumentado para dar más tiempo a que cargue la página
-
-        # Manejar pop-ups y cookies
-        handle_popups(driver)
         
-        # Esperar un momento adicional para asegurarse de que los pop-ups se han cerrado
-        time.sleep(2)
-
-        # Ajustar tamaño de ventana para captura completa
-        total_height = driver.execute_script("""
-            return Math.max(
-                document.body.scrollHeight,
-                document.documentElement.scrollHeight,
-                document.body.offsetHeight,
-                document.documentElement.offsetHeight,
-                document.body.clientHeight,
-                document.documentElement.clientHeight
-            );
-        """)
+        # Esperar a que la página cargue (máximo 30 segundos)
+        time.sleep(5)
         
-        driver.set_window_size(width, total_height)
+        try:
+            # Manejar pop-ups y cookies
+            handle_popups(driver)
+            time.sleep(2)
+        except Exception as e:
+            st.warning(f"Warning handling popups: {str(e)}")
         
-        # Asegurar que no hay elementos flotantes molestos
-        driver.execute_script("""
-            // Remover elementos fixed o sticky que puedan obstruir
-            document.querySelectorAll('*').forEach(el => {
-                const style = window.getComputedStyle(el);
-                if (style.position === 'fixed' || style.position === 'sticky') {
-                    el.style.display = 'none';
-                }
-            });
-        """)
+        try:
+            # Ajustar tamaño para captura completa
+            total_height = driver.execute_script("""
+                return Math.max(
+                    document.body.scrollHeight,
+                    document.documentElement.scrollHeight,
+                    document.body.offsetHeight,
+                    document.documentElement.offsetHeight,
+                    document.body.clientHeight,
+                    document.documentElement.clientHeight
+                );
+            """)
+            
+            driver.set_window_size(width, total_height)
+            
+            # Limpiar elementos flotantes
+            driver.execute_script("""
+                document.querySelectorAll('*').forEach(el => {
+                    const style = window.getComputedStyle(el);
+                    if (style.position === 'fixed' || style.position === 'sticky') {
+                        el.style.display = 'none';
+                    }
+                });
+            """)
+        except Exception as e:
+            st.warning(f"Warning adjusting page: {str(e)}")
         
-        # Ensure the directory exists
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        # Asegurar que el directorio existe
+        os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else '.', exist_ok=True)
         
-        # Take and save screenshot
+        # Tomar y guardar screenshot
         driver.save_screenshot(output_path)
-        return True
+        
+        # Verificar que el archivo se creó correctamente
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            return True
+        else:
+            st.error("Screenshot file was not created or is empty")
+            return False
+            
     except Exception as e:
-        print(f"Error capturing screenshot for {url}: {e}")
+        st.error(f"Error capturing screenshot: {str(e)}")
         return False
+    finally:
+        try:
+            driver.quit()
+        except:
+            pass
 
 def get_loading_message():
     """Retorna un mensaje aleatorio divertido durante la carga"""
@@ -412,7 +438,6 @@ https://www.another-example.com
                         
                         if capture_screenshot(driver, url, output_path, width, height):
                             screenshot_paths.append(output_path)
-                        driver.quit()
                     except Exception as e:
                         st.error(f"Error capturing {url} ({device}): {str(e)}")
             
