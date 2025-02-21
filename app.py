@@ -3,7 +3,6 @@ import tempfile
 import os
 import zipfile
 import time
-import subprocess
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -15,24 +14,9 @@ import re
 import random
 from PIL import Image
 
-def install_chrome():
-    """Instala Chrome y Chromedriver en el entorno"""
-    try:
-        # Actualizar repositorios e instalar Chrome
-        subprocess.run(['apt-get', 'update'], check=True)
-        subprocess.run(['apt-get', 'install', '-y', 'chromium-chromedriver'], check=True)
-        subprocess.run(['cp', '/usr/lib/chromium-browser/chromedriver', '/usr/bin'], check=True)
-        return True
-    except Exception as e:
-        st.error(f"Error installing Chrome: {str(e)}")
-        return False
-
 def setup_driver(device_type, custom_width=None, custom_height=None):
     """Configura y retorna un webdriver de Chrome con las opciones especificadas"""
     try:
-        # Instalar Chrome si es necesario
-        install_chrome()
-        
         # Configuraciones de dispositivo
         device_profiles = {
             "desktop": {"width": 1920, "height": 1080},
@@ -55,9 +39,10 @@ def setup_driver(device_type, custom_width=None, custom_height=None):
         chrome_options.add_argument('--disable-extensions')
         chrome_options.add_argument('--disable-infobars')
         chrome_options.add_argument('--disable-notifications')
+        chrome_options.binary_location = '/usr/bin/chromium-browser'
         
         # Configurar el servicio de Chrome
-        service = Service('/usr/bin/chromedriver')
+        service = Service('/usr/lib/chromium-browser/chromedriver')
         
         # Inicializar el driver
         driver = webdriver.Chrome(service=service, options=chrome_options)
