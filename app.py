@@ -7,9 +7,21 @@ from playwright.sync_api import sync_playwright
 import re
 import random
 from PIL import Image
+import subprocess
+
+def install_playwright_deps():
+    """Instala las dependencias necesarias de Playwright"""
+    try:
+        subprocess.run(['playwright', 'install', 'chromium'], check=True)
+        return True
+    except Exception as e:
+        st.error(f"Error installing Playwright dependencies: {str(e)}")
+        return False
 
 @st.cache_resource
 def get_playwright():
+    """Inicializa Playwright y asegura que los navegadores estén instalados"""
+    install_playwright_deps()
     return sync_playwright().start()
 
 def setup_browser(device_type, custom_width=None, custom_height=None):
