@@ -30,6 +30,8 @@ def setup_driver(device_type, custom_width=None, custom_height=None):
     chrome_options.add_argument("--disable-infobars")
     chrome_options.add_argument("--disable-notifications")
     chrome_options.add_argument("--disable-popup-blocking")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
     
     # Configuraciones de dispositivo
     device_profiles = {
@@ -48,8 +50,22 @@ def setup_driver(device_type, custom_width=None, custom_height=None):
     else:
         chrome_options.add_argument(f"--window-size={custom_width},{custom_height}")
     
-    # Inicializar el driver
-    driver = webdriver.Chrome(options=chrome_options)
+    try:
+        # Intentar usar undetected-chromedriver
+        import undetected_chromedriver as uc
+        driver = uc.Chrome(options=chrome_options)
+    except Exception as e:
+        st.error(f"Error with undetected-chromedriver: {str(e)}")
+        try:
+            # Fallback a selenium normal
+            from selenium.webdriver.chrome.service import Service
+            from webdriver_manager.chrome import ChromeDriverManager
+            service = Service(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+        except Exception as e:
+            st.error(f"Error with regular selenium: {str(e)}")
+            raise e
+    
     return driver, width, height
 
 # Validate URLs
