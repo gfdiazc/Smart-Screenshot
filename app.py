@@ -29,18 +29,22 @@ def get_proxy():
 
 def setup_driver():
     options = Options()
-    options.add_argument('--headless=new')  # Nueva versión de headless
+    
+    # Configuración básica
+    options.add_argument('--headless=new')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
-    options.add_argument('--disable-infobars')
-    options.add_argument('--disable-notifications')
     options.add_argument('--window-size=1920,1080')
     options.add_argument('--start-maximized')
-    options.add_argument('--force-device-scale-factor=1')
     
     # Set Chrome binary path for Streamlit Cloud
     options.binary_location = '/usr/bin/chromium'
+    
+    # Configurar CDP para evadir detección
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option('useAutomationExtension', False)
+    options.add_argument('--disable-blink-features=AutomationControlled')
     
     # Random user agent
     ua = UserAgent()
@@ -52,34 +56,76 @@ def setup_driver():
     if proxy:
         options.add_argument(f'--proxy-server={proxy}')
     
-    # Additional evasion options
-    options.add_argument('--disable-blink-features=AutomationControlled')
-    options.add_experimental_option('excludeSwitches', ['enable-automation'])
-    options.add_experimental_option('useAutomationExtension', False)
-    
-    # Additional options for stability and rendering
-    options.add_argument('--disable-extensions')
-    options.add_argument('--disable-software-rasterizer')
-    options.add_argument('--ignore-certificate-errors')
-    options.add_argument('--allow-running-insecure-content')
-    options.add_argument('--disable-web-security')
-    options.add_argument('--enable-javascript')
-    options.add_argument('--hide-scrollbars')
-    options.add_argument('--disable-popup-blocking')
-    options.add_argument('--disable-notifications')
-    
-    # Performance options
-    options.add_argument('--disable-dev-tools')
-    options.add_argument('--dns-prefetch-disable')
-    options.add_argument('--disable-features=IsolateOrigins,site-per-process')
-    
     # Create driver with service
     service = Service('/usr/bin/chromedriver')
     driver = webdriver.Chrome(service=service, options=options)
     
+    # Modificar navigator.webdriver
+    driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+        'source': '''
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+            
+            // Overwrite the 'plugins' property to use a custom getter
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5].map(() => ({
+                    name: ['Chrome PDF Plugin', 'Chrome PDF Viewer', 'Native Client'][Math.floor(Math.random() * 3)]
+                }))
+            });
+            
+            // Overwrite the 'languages' property
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['es-ES', 'es', 'en-US', 'en']
+            });
+            
+            // Add chrome object
+            window.chrome = {
+                runtime: {},
+                loadTimes: function() {},
+                csi: function() {},
+                app: {}
+            };
+            
+            // Overwrite permissions
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                Promise.resolve({ state: Notification.permission }) :
+                originalQuery(parameters)
+            );
+            
+            // Modificar el comportamiento de WebGL
+            HTMLCanvasElement.prototype.getContext = new Proxy(HTMLCanvasElement.prototype.getContext, {
+                apply(target, thisArg, args) {
+                    if (args[0] === 'webgl' || args[0] === 'webgl2') {
+                        const context = target.apply(thisArg, args);
+                        context.getParameter = new Proxy(context.getParameter, {
+                            apply(target, thisArg, args) {
+                                const param = args[0];
+                                const result = target.apply(thisArg, args);
+                                
+                                // Modificar valores específicos de WebGL
+                                if (param === 37445) { // UNMASKED_VENDOR_WEBGL
+                                    return 'Intel Inc.';
+                                }
+                                if (param === 37446) { // UNMASKED_RENDERER_WEBGL
+                                    return 'Intel Iris OpenGL Engine';
+                                }
+                                
+                                return result;
+                            }
+                        });
+                    }
+                    return target.apply(thisArg, args);
+                }
+            });
+        '''
+    })
+    
     # Apply stealth settings
     stealth(driver,
-        languages=["en-US", "en"],
+        languages=["es-ES", "es", "en-US", "en"],
         vendor="Google Inc.",
         platform="Win32",
         webgl_vendor="Intel Inc.",
@@ -87,12 +133,14 @@ def setup_driver():
         fix_hairline=True,
     )
     
-    # Set window size
-    driver.set_window_size(1920, 1080)
-    
     # Establecer timeouts
     driver.set_page_load_timeout(30)
     driver.implicitly_wait(10)
+    
+    # Simular comportamiento humano inicial
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight/2);")
+    time.sleep(random.uniform(1, 2))
+    driver.execute_script("window.scrollTo(0, 0);")
     
     return driver, 1920, 1080
 
@@ -124,6 +172,9 @@ def capture_screenshot(url, device_profile="desktop"):
         try:
             driver, width, height = setup_driver()
             
+            # Simular comportamiento humano antes de cargar la página
+            time.sleep(random.uniform(1, 2))
+            
             # Load page with timeout and wait for content
             driver.set_page_load_timeout(30)
             driver.get(url)
@@ -133,22 +184,80 @@ def capture_screenshot(url, device_profile="desktop"):
                 EC.presence_of_element_located((By.TAG_NAME, "body"))
             )
             
-            # Esperar un tiempo adicional para contenido dinámico
-            time.sleep(5)
+            # Esperar a que desaparezca el overlay de carga si existe
+            try:
+                WebDriverWait(driver, 10).until_not(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, ".loading, .loader, .spinner"))
+                )
+            except:
+                pass
+            
+            # Simular movimiento aleatorio del mouse
+            driver.execute_script("""
+                (() => {
+                    const box = document.body.getBoundingClientRect();
+                    const points = Array.from({length: 5}, () => ({
+                        x: Math.random() * box.width,
+                        y: Math.random() * box.height
+                    }));
+                    
+                    points.forEach(point => {
+                        const event = new MouseEvent('mousemove', {
+                            view: window,
+                            bubbles: true,
+                            cancelable: true,
+                            clientX: point.x,
+                            clientY: point.y
+                        });
+                        document.elementFromPoint(point.x, point.y)?.dispatchEvent(event);
+                    });
+                })();
+            """)
+            
+            # Esperar un tiempo aleatorio
+            time.sleep(random.uniform(2, 3))
             
             # Scroll para cargar contenido lazy
             total_height = driver.execute_script("return Math.max( document.body.scrollHeight, document.body.offsetHeight, document.documentElement.clientHeight, document.documentElement.scrollHeight, document.documentElement.offsetHeight );")
             viewport_height = driver.execute_script("return window.innerHeight")
-            slices = 3
+            slices = 5
             slice_height = total_height // slices
             
-            # Scroll suave por la página
+            # Scroll suave por la página con pausas aleatorias
             for i in range(slices):
-                driver.execute_script(f"window.scrollTo(0, {i * slice_height});")
-                time.sleep(1)
+                # Scroll con velocidad variable
+                driver.execute_script(f"""
+                    window.scrollTo({{
+                        top: {i * slice_height},
+                        behavior: 'smooth'
+                    }});
+                """)
+                # Pausa aleatoria simulando lectura
+                time.sleep(random.uniform(0.5, 1.5))
+                
+                # 30% de probabilidad de hacer un pequeño scroll arriba y abajo
+                if random.random() < 0.3:
+                    driver.execute_script(f"""
+                        window.scrollTo({{
+                            top: {i * slice_height - 100},
+                            behavior: 'smooth'
+                        }});
+                    """)
+                    time.sleep(0.5)
+                    driver.execute_script(f"""
+                        window.scrollTo({{
+                            top: {i * slice_height},
+                            behavior: 'smooth'
+                        }});
+                    """)
             
-            # Volver al inicio
-            driver.execute_script("window.scrollTo(0, 0);")
+            # Volver al inicio suavemente
+            driver.execute_script("""
+                window.scrollTo({
+                    top: 0,
+                    behavior: 'smooth'
+                });
+            """)
             time.sleep(2)
             
             # Intentar cerrar pop-ups o cookies si existen
@@ -163,6 +272,10 @@ def capture_screenshot(url, device_profile="desktop"):
                     "//button[contains(., 'Cerrar')]",
                     "//div[contains(@class, 'cookie')]//button",
                     "//div[contains(@class, 'popup')]//button",
+                    "//div[contains(@class, 'modal')]//button",
+                    "//button[contains(@class, 'close')]",
+                    "//button[contains(@class, 'accept')]",
+                    "//button[contains(@class, 'cookie')]",
                 ]
                 
                 for selector in selectors:
@@ -170,6 +283,9 @@ def capture_screenshot(url, device_profile="desktop"):
                         elements = driver.find_elements(By.XPATH, selector)
                         for element in elements:
                             if element.is_displayed():
+                                # Simular hover antes de hacer clic
+                                driver.execute_script("arguments[0].dispatchEvent(new MouseEvent('mouseover', {'bubbles': true}));", element)
+                                time.sleep(0.3)
                                 element.click()
                                 time.sleep(0.5)
                     except:
@@ -177,7 +293,7 @@ def capture_screenshot(url, device_profile="desktop"):
             except:
                 pass
             
-            # Esperar un momento después de manejar pop-ups
+            # Esperar a que se estabilice la página
             time.sleep(2)
             
             # Ocultar elementos flotantes que puedan interferir
