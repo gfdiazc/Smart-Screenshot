@@ -1,6 +1,5 @@
 streamlit==1.32.0
-selenium==4.19.0
-webdriver-manager==4.0.1
+playwright==1.42.0
 pillow==10.2.0
 pandas==2.2.0
 setuptools==69.1.1

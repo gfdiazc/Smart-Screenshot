@@ -3,58 +3,20 @@ import tempfile
 import os
 import zipfile
 import time
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from PIL import Image
+from playwright.sync_api import sync_playwright
 import re
 import random
-import subprocess
+from PIL import Image
 
-def install_chrome():
-    """Instala Chrome en el servidor si no está instalado"""
+@st.cache_resource
+def get_playwright():
+    return sync_playwright().start()
+
+def setup_browser(device_type, custom_width=None, custom_height=None):
+    """Configura y retorna un navegador con las opciones especificadas"""
     try:
-        # Intentar instalar Chrome
-        subprocess.run(['apt-get', 'update'], check=True)
-        subprocess.run(['apt-get', 'install', '-y', 'wget'], check=True)
-        subprocess.run(['wget', 'https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb'], check=True)
-        subprocess.run(['apt-get', 'install', '-y', './google-chrome-stable_current_amd64.deb'], check=True)
-        return True
-    except Exception as e:
-        st.error(f"Error installing Chrome: {str(e)}")
-        return False
-
-def sanitize_filename(url):
-    # Eliminar el protocolo (http:// o https://)
-    url = re.sub(r'^https?://', '', url)
-    # Eliminar caracteres no válidos para nombres de archivo
-    url = re.sub(r'[<>:"/\\|?*]', '_', url)
-    # Limitar la longitud del nombre del archivo
-    return url[:50]
-
-def setup_driver(device_type, custom_width=None, custom_height=None):
-    """Configura y retorna un webdriver de Chrome con las opciones especificadas"""
-    try:
-        # Asegurar que Chrome está instalado
-        install_chrome()
-        
-        # Configuración de Chrome Options
-        chrome_options = Options()
-        chrome_options.add_argument("--headless=new")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--disable-infobars")
-        chrome_options.add_argument("--disable-notifications")
-        chrome_options.add_argument("--disable-popup-blocking")
-        chrome_options.add_argument("--disable-extensions")
-        chrome_options.add_argument("--disable-software-rasterizer")
+        playwright = get_playwright()
+        browser = playwright.chromium.launch()
         
         # Configuraciones de dispositivo
         device_profiles = {
@@ -68,235 +30,59 @@ def setup_driver(device_type, custom_width=None, custom_height=None):
         width = device_profiles[device_type]["width"]
         height = device_profiles[device_type]["height"]
         
-        if device_type != "custom":
-            chrome_options.add_argument(f"--window-size={width},{height}")
-        else:
-            chrome_options.add_argument(f"--window-size={custom_width},{custom_height}")
+        context = browser.new_context(
+            viewport={'width': width, 'height': height}
+        )
         
-        # Inicializar el driver
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-        
-        return driver, width, height
+        return context, browser, width, height
     except Exception as e:
-        st.error(f"Error setting up Chrome driver: {str(e)}")
+        st.error(f"Error setting up browser: {str(e)}")
         raise e
 
-# Validate URLs
-def validate_url(url):
-    if not url.startswith("http://") and not url.startswith("https://"):
-        return False
-    return True
+def sanitize_filename(url):
+    # Eliminar el protocolo (http:// o https://)
+    url = re.sub(r'^https?://', '', url)
+    # Eliminar caracteres no válidos para nombres de archivo
+    url = re.sub(r'[<>:"/\\|?*]', '_', url)
+    # Limitar la longitud del nombre del archivo
+    return url[:50]
 
-def handle_popups(driver):
-    """Maneja diferentes tipos de pop-ups, cookies y ofertas en múltiples idiomas"""
-    
-    # Selectores para cookies en múltiples idiomas
-    cookie_selectors = [
-        # Inglés
-        "//button[contains(translate(., 'ACCEPT', 'accept'), 'accept')]",
-        "//button[contains(translate(., 'AGREE', 'agree'), 'agree')]",
-        "//button[contains(translate(., 'ALLOW', 'allow'), 'allow')]",
-        "//button[contains(translate(., 'CONSENT', 'consent'), 'consent')]",
-        "//button[contains(., 'Got it')]",
-        "//button[contains(., 'I understand')]",
-        "//button[contains(., 'Continue')]",
-        # Español
-        "//button[contains(translate(., 'ACEPT', 'acept'), 'aceptar')]",
-        "//button[contains(translate(., 'ENTEND', 'entend'), 'entendido')]",
-        "//button[contains(translate(., 'CONTIN', 'contin'), 'continuar')]",
-        # Elementos genéricos de cookies
-        "//*[@id='cookie-banner']//button",
-        "//*[contains(@class, 'cookie')]//button",
-        "//*[contains(@id, 'cookie')]//button",
-        "//button[contains(., 'cookies')]",
-        "//button[contains(., 'Cookies')]",
-        # Elementos específicos comunes
-        "//button[@id='onetrust-accept-btn-handler']",
-        "//button[contains(@class, 'cookie-accept')]",
-        "//button[contains(@class, 'accept-cookies')]",
-        "//button[contains(@class, 'cookie-consent')]",
-        # Links y spans que podrían ser botones
-        "//a[contains(translate(., 'ACCEPT', 'accept'), 'accept')]",
-        "//a[contains(translate(., 'AGREE', 'agree'), 'agree')]",
-        "//span[contains(translate(., 'ACCEPT', 'accept'), 'accept')]"
-    ]
-    
-    # Intentar aceptar cookies primero
-    for selector in cookie_selectors:
-        try:
-            elements = driver.find_elements(By.XPATH, selector)
-            for element in elements:
-                if element.is_displayed():
-                    try:
-                        element.click()
-                        time.sleep(0.5)
-                    except:
-                        try:
-                            driver.execute_script("arguments[0].click();", element)
-                        except:
-                            continue
-        except Exception:
-            continue
-    
-    time.sleep(1)
-    
-    # Selectores para pop-ups y modales en múltiples idiomas
-    popup_selectors = [
-        # Botones de cierre en inglés
-        "//button[contains(@aria-label, 'Close')]",
-        "//button[contains(@aria-label, 'Dismiss')]",
-        "//button[contains(@title, 'Close')]",
-        "//button[contains(., 'Close')]",
-        "//button[contains(., 'Skip')]",
-        "//button[contains(., 'No thanks')]",
-        "//button[contains(., 'Not now')]",
-        # Botones de cierre en español
-        "//button[contains(@aria-label, 'Cerrar')]",
-        "//button[contains(@title, 'Cerrar')]",
-        "//button[contains(., 'Cerrar')]",
-        "//button[contains(., 'Saltar')]",
-        "//button[contains(., 'No, gracias')]",
-        "//button[contains(., 'Ahora no')]",
-        # Elementos de cierre genéricos
-        "//button[contains(@class, 'close')]",
-        "//div[contains(@class, 'close')]",
-        "//span[contains(@class, 'close')]",
-        "//i[contains(@class, 'close')]",
-        "//button[contains(@class, 'modal-close')]",
-        "//div[contains(@class, 'modal-close')]",
-        # Símbolos comunes de cierre
-        "//button[text()='×']",
-        "//div[text()='×']",
-        "//button[text()='X']",
-        "//div[text()='X']",
-        "//button[contains(., '×')]",
-        "//div[contains(., '×')]",
-        "//button[contains(., 'X')]",
-        "//div[contains(., 'X')]",
-        # Elementos específicos de newsletters y suscripciones
-        "//button[contains(., 'Not interested')]",
-        "//button[contains(., 'No me interesa')]",
-        "//button[contains(@class, 'newsletter-close')]",
-        "//button[contains(@class, 'subscription-close')]"
-    ]
-    
-    # Intentar cerrar pop-ups
-    for selector in popup_selectors:
-        try:
-            elements = driver.find_elements(By.XPATH, selector)
-            for element in elements:
-                if element.is_displayed():
-                    try:
-                        driver.execute_script("arguments[0].scrollIntoView(true);", element)
-                        time.sleep(0.2)
-                        element.click()
-                        time.sleep(0.5)
-                    except:
-                        try:
-                            driver.execute_script("arguments[0].click();", element)
-                            time.sleep(0.5)
-                        except:
-                            continue
-        except Exception:
-            continue
-    
-    # Limpieza final con JavaScript
-    try:
-        driver.execute_script("""
-            function isVisible(elem) {
-                return !!(elem.offsetWidth || elem.offsetHeight || elem.getClientRects().length);
-            }
-            
-            // Remover elementos comunes de pop-ups y overlays
-            const elementsToRemove = document.querySelectorAll(
-                '[class*="promotion"], [class*="offer"], [class*="modal"], ' +
-                '[class*="popup"], [class*="overlay"], [id*="modal"], ' +
-                '[id*="popup"], [class*="newsletter"], [class*="subscription"], ' +
-                '[class*="dialog"], [class*="lightbox"], [class*="banner"], ' +
-                '[id*="dialog"], [id*="lightbox"], [id*="banner"]'
-            );
-            
-            elementsToRemove.forEach(el => {
-                if (isVisible(el)) {
-                    el.remove();
-                }
-            });
-            
-            // Restaurar el scroll y estilos
-            document.body.style.overflow = 'auto';
-            document.body.style.position = 'static';
-            document.documentElement.style.overflow = 'auto';
-            document.body.classList.remove('modal-open');
-            document.body.classList.remove('no-scroll');
-            
-            // Eliminar overlays y fondos oscuros
-            const overlays = document.querySelectorAll(
-                '[class*="overlay"], [class*="backdrop"], [class*="background"], ' +
-                '[class*="modal-backdrop"], [class*="dialog-backdrop"]'
-            );
-            overlays.forEach(el => {
-                if (isVisible(el)) {
-                    el.remove();
-                }
-            });
-        """)
-    except Exception:
-        pass
-    
-    time.sleep(1)
-
-def capture_screenshot(driver, url, output_path, width, height):
+def capture_screenshot(context, url, output_path, width, height):
     """Captura un screenshot de la URL especificada"""
+    page = None
     try:
-        # Configurar el tamaño de la ventana
-        driver.set_window_size(width, height)
+        # Crear nueva página
+        page = context.new_page()
         
-        # Cargar la página
-        driver.get(url)
+        # Navegar a la URL
+        page.goto(url, wait_until='networkidle')
         
-        # Esperar a que la página cargue (máximo 30 segundos)
-        time.sleep(5)
+        # Esperar un poco más para contenido dinámico
+        page.wait_for_timeout(2000)
         
-        try:
-            # Manejar pop-ups y cookies
-            handle_popups(driver)
-            time.sleep(2)
-        except Exception as e:
-            st.warning(f"Warning handling popups: {str(e)}")
+        # Ajustar tamaño para captura completa
+        page.set_viewport_size({"width": width, "height": height})
         
-        try:
-            # Ajustar tamaño para captura completa
-            total_height = driver.execute_script("""
-                return Math.max(
-                    document.body.scrollHeight,
-                    document.documentElement.scrollHeight,
-                    document.body.offsetHeight,
-                    document.documentElement.offsetHeight,
-                    document.body.clientHeight,
-                    document.documentElement.clientHeight
-                );
-            """)
-            
-            driver.set_window_size(width, total_height)
-            
-            # Limpiar elementos flotantes
-            driver.execute_script("""
-                document.querySelectorAll('*').forEach(el => {
-                    const style = window.getComputedStyle(el);
-                    if (style.position === 'fixed' || style.position === 'sticky') {
-                        el.style.display = 'none';
-                    }
-                });
-            """)
-        except Exception as e:
-            st.warning(f"Warning adjusting page: {str(e)}")
+        # Obtener altura total de la página
+        total_height = page.evaluate("""
+            Math.max(
+                document.body.scrollHeight,
+                document.documentElement.scrollHeight,
+                document.body.offsetHeight,
+                document.documentElement.offsetHeight,
+                document.body.clientHeight,
+                document.documentElement.clientHeight
+            )
+        """)
+        
+        # Ajustar viewport para captura completa
+        page.set_viewport_size({"width": width, "height": total_height})
         
         # Asegurar que el directorio existe
         os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else '.', exist_ok=True)
         
-        # Tomar y guardar screenshot
-        driver.save_screenshot(output_path)
+        # Tomar screenshot
+        page.screenshot(path=output_path, full_page=True)
         
         # Verificar que el archivo se creó correctamente
         if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
@@ -309,10 +95,8 @@ def capture_screenshot(driver, url, output_path, width, height):
         st.error(f"Error capturing screenshot: {str(e)}")
         return False
     finally:
-        try:
-            driver.quit()
-        except:
-            pass
+        if page:
+            page.close()
 
 def get_loading_message():
     """Retorna un mensaje aleatorio divertido durante la carga"""
@@ -439,12 +223,17 @@ https://www.another-example.com
                         progress_container.progress(progress)
                         message_container.info(get_loading_message())
                         
-                        driver, width, height = setup_driver(device, custom_width, custom_height)
+                        context, browser, width, height = setup_browser(device, custom_width, custom_height)
                         safe_filename = sanitize_filename(url)
                         output_path = os.path.join(temp_dir, f"{safe_filename}_{device}.png")
                         
-                        if capture_screenshot(driver, url, output_path, width, height):
+                        if capture_screenshot(context, url, output_path, width, height):
                             screenshot_paths.append(output_path)
+                            
+                        # Cerrar el contexto y el navegador
+                        context.close()
+                        browser.close()
+                            
                     except Exception as e:
                         st.error(f"Error capturing {url} ({device}): {str(e)}")
             
