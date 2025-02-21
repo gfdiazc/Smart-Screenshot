@@ -1,6 +1,8 @@
 import streamlit as st
 import os
 import time
+import zipfile
+import re
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -76,11 +78,30 @@ def setup_driver():
     driver.set_window_size(1920, 1080)
     return driver, 1920, 1080
 
+def get_loading_message():
+    """Retorna un mensaje aleatorio divertido durante la carga"""
+    messages = [
+        "🎨 Making your screenshots pixel-perfect...",
+        "🚀 Zooming through the internet...",
+        "🎭 Dealing with those pesky pop-ups...",
+        "🍪 Handling cookies (the digital ones)...",
+        "📱 Teaching your website to pose...",
+        "🎯 Capturing the perfect shot...",
+        "🎪 Juggling with different screen sizes...",
+        "🎮 Playing hide and seek with pop-ups...",
+        "🎭 Preparing the website for its photoshoot...",
+        "🌈 Collecting all the pixels...",
+        "🎨 Mixing the perfect pixel palette...",
+        "🎯 Calibrating the screenshot sensors..."
+    ]
+    return random.choice(messages)
+
 def capture_screenshot(url, device_profile="desktop"):
     try:
         driver = None
         temp_dir = tempfile.mkdtemp()
-        screenshot_path = os.path.join(temp_dir, "screenshot.png")
+        safe_filename = sanitize_filename(url)
+        screenshot_path = os.path.join(temp_dir, f"{safe_filename}_{device_profile}.png")
         
         try:
             driver, width, height = setup_driver()
@@ -119,6 +140,15 @@ def capture_screenshot(url, device_profile="desktop"):
     except Exception as e:
         st.error(f"Critical error: {str(e)}")
         return None
+
+def sanitize_filename(url):
+    """Sanitiza una URL para usarla como nombre de archivo"""
+    # Eliminar el protocolo (http:// o https://)
+    url = re.sub(r'^https?://', '', url)
+    # Eliminar caracteres no válidos para nombres de archivo
+    url = re.sub(r'[<>:"/\\|?*]', '_', url)
+    # Limitar la longitud del nombre del archivo
+    return url[:50]
 
 def main():
     st.title("📸 Smart Screenshot Capture")
@@ -229,16 +259,10 @@ https://www.another-example.com
                         progress_container.progress(progress)
                         message_container.info(get_loading_message())
                         
-                        driver, width, height = setup_driver(device, custom_width, custom_height)
-                        safe_filename = sanitize_filename(url)
-                        output_path = os.path.join(st.session_state.temp_dir, f"{safe_filename}_{device}.png")
+                        screenshot_path = capture_screenshot(url, device)
                         
-                        if capture_screenshot(driver, url, output_path, width, height):
-                            if output_path not in st.session_state.screenshot_paths:
-                                st.session_state.screenshot_paths.append(output_path)
-                            
-                        # Cerrar el driver
-                        driver.quit()
+                        if screenshot_path and screenshot_path not in st.session_state.screenshot_paths:
+                            st.session_state.screenshot_paths.append(screenshot_path)
                             
                     except Exception as e:
                         st.error(f"Error capturing {url} ({device}): {str(e)}")
