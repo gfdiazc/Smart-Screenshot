@@ -14,38 +14,42 @@ import re
 import random
 from PIL import Image
 from selenium.webdriver.common.action_chains import ActionChains
+from fake_useragent import UserAgent
+from selenium_stealth import stealth
+import requests
+
+def get_proxy():
+    """Obtiene una lista de proxies y retorna uno aleatorio"""
+    try:
+        # Obtener lista de proxies
+        proxy_url = "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt"
+        response = requests.get(proxy_url)
+        proxies = response.text.strip().split('\n')
+        
+        # Seleccionar un proxy aleatorio
+        proxy = random.choice(proxies)
+        return f"http://{proxy}"
+    except:
+        return None
 
 def setup_driver(device_type, custom_width=None, custom_height=None):
     """Configura y retorna un webdriver de Chrome con las opciones especificadas"""
     try:
-        # Configuraciones de dispositivo con user agents específicos
+        # Configuraciones de dispositivo
         device_profiles = {
-            "desktop": {
-                "width": 1920,
-                "height": 1080,
-                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-            },
-            "mobile": {
-                "width": 375,
-                "height": 812,
-                "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
-            },
-            "tablet": {
-                "width": 768,
-                "height": 1024,
-                "user_agent": "Mozilla/5.0 (iPad; CPU OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
-            },
-            "custom": {
-                "width": custom_width,
-                "height": custom_height,
-                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-            }
+            "desktop": {"width": 1920, "height": 1080},
+            "mobile": {"width": 375, "height": 812},
+            "tablet": {"width": 768, "height": 1024},
+            "custom": {"width": custom_width, "height": custom_height}
         }
         
-        # Obtener dimensiones y user agent del dispositivo
+        # Obtener dimensiones del dispositivo
         width = device_profiles[device_type]["width"]
         height = device_profiles[device_type]["height"]
-        user_agent = device_profiles[device_type]["user_agent"]
+        
+        # Generar User Agent aleatorio
+        ua = UserAgent()
+        user_agent = ua.random
         
         # Configurar opciones de Chrome
         chrome_options = Options()
@@ -55,26 +59,27 @@ def setup_driver(device_type, custom_width=None, custom_height=None):
         chrome_options.add_argument('--disable-gpu')
         chrome_options.add_argument(f'--window-size={width},{height}')
         chrome_options.add_argument('--disable-extensions')
-        chrome_options.add_argument('--disable-infobars')
         chrome_options.add_argument('--disable-notifications')
         chrome_options.add_argument('--disable-blink-features=AutomationControlled')
         chrome_options.add_argument('--disable-web-security')
+        chrome_options.add_argument('--ignore-certificate-errors')
         chrome_options.add_argument('--lang=es-ES,es')
         chrome_options.add_argument(f'--user-agent={user_agent}')
         
-        # Configuraciones experimentales avanzadas
-        chrome_options.add_experimental_option('excludeSwitches', ['enable-automation', 'enable-logging'])
+        # Intentar usar un proxy
+        proxy = get_proxy()
+        if proxy:
+            chrome_options.add_argument(f'--proxy-server={proxy}')
+        
+        # Configuraciones experimentales
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
         chrome_options.add_experimental_option('prefs', {
             'profile.default_content_setting_values.notifications': 2,
             'profile.default_content_settings.popups': 0,
             'download.prompt_for_download': False,
-            'download.directory_upgrade': True,
-            'safebrowsing.enabled': True,
             'credentials_enable_service': False,
-            'profile.password_manager_enabled': False,
-            'profile.managed_default_content_settings.images': 1,
-            'profile.managed_default_content_settings.javascript': 1
+            'profile.password_manager_enabled': False
         })
         
         chrome_options.binary_location = '/usr/bin/chromium'
@@ -85,45 +90,44 @@ def setup_driver(device_type, custom_width=None, custom_height=None):
         # Inicializar el driver
         driver = webdriver.Chrome(service=service, options=chrome_options)
         
-        # Ejecutar JavaScript para evadir detección
-        evasion_js = """
-            // Ocultar webdriver
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined
-            });
-            
-            // Modificar user agent
-            Object.defineProperty(navigator, 'userAgent', {
-                get: () => '""" + user_agent + """'
-            });
-            
-            // Simular plugins
-            Object.defineProperty(navigator, 'plugins', {
-                get: () => [1, 2, 3, 4, 5]
-            });
-            
-            // Simular idiomas
-            Object.defineProperty(navigator, 'languages', {
-                get: () => ['es-ES', 'es', 'en-US', 'en']
-            });
-            
-            // Simular plataforma
-            Object.defineProperty(navigator, 'platform', {
-                get: () => 'Win32'
-            });
-            
-            // Ocultar Chrome
-            window.chrome = {
-                runtime: {}
-            };
-        """
-        
-        driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
-            'source': evasion_js
-        })
+        # Aplicar técnicas de evasión de Selenium Stealth
+        stealth(
+            driver,
+            user_agent=user_agent,
+            languages=["es-ES", "es"],
+            vendor="Google Inc.",
+            platform="Win32",
+            webgl_vendor="Intel Inc.",
+            renderer="Intel Iris OpenGL Engine",
+            fix_hairline=True,
+            run_on_insecure_origins=True
+        )
         
         # Configurar el tamaño de la ventana
         driver.set_window_size(width, height)
+        
+        # Ejecutar JavaScript adicional para evasión
+        driver.execute_cdp_cmd('Network.setUserAgentOverride', {"userAgent": user_agent})
+        driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+            "source": """
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5].map(() => ({
+                        name: ['Chrome PDF Plugin', 'Chrome PDF Viewer', 'Native Client'][Math.floor(Math.random() * 3)]
+                    }))
+                });
+                window.chrome = {
+                    runtime: {}
+                };
+                Object.defineProperty(navigator, 'permissions', {
+                    get: () => ({
+                        query: Promise.resolve({state: Notification.permission})
+                    })
+                });
+            """
+        })
         
         return driver, width, height
     except Exception as e:

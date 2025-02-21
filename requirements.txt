@@ -3,5 +3,13 @@ selenium==4.19.0
 pillow==10.2.0
 pandas==2.2.0
 webdriver-manager==4.0.1
+fake-useragent==1.4.0
+selenium-stealth==1.0.6
+requests[socks]==2.31.0
+stem==1.8.2
+chromedriver-autoinstaller==1.0.0
+chromium-chromedriver==133.0.0
 setuptools==69.1.1
 pyee==11.0.1
+selenium-wire==5.1.5
+undetected-chromedriver==3.5.5
