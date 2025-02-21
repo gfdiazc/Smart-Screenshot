@@ -319,10 +319,6 @@ https://www.another-example.com
                             if os.path.exists(path):
                                 with tab:
                                     try:
-                                        st.image(
-                                            path,
-                                            use_container_width=True
-                                        )
                                         col1, col2 = st.columns([3, 1])
                                         with col2:
                                             with open(path, "rb") as f:
@@ -334,6 +330,13 @@ https://www.another-example.com
                                                     key=f"dl_{path}",
                                                     use_container_width=True
                                                 )
+                                        
+                                        # Botón para mostrar/ocultar la imagen
+                                        if st.button("👁️ Ver Screenshot", key=f"view_{path}"):
+                                            st.image(
+                                                path,
+                                                use_container_width=True
+                                            )
                                     except Exception as e:
                                         st.error(f"Error displaying image {path}: {str(e)}")
                         
