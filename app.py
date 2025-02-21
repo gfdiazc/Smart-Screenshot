@@ -3,25 +3,36 @@ import tempfile
 import os
 import zipfile
 import time
-import asyncio
-from pyppeteer import launch
+import subprocess
+import pandas as pd
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import re
 import random
 from PIL import Image
 
-@st.cache_resource
-def get_event_loop():
-    """Obtiene o crea un event loop para asyncio"""
+def install_chrome():
+    """Instala Chrome y Chromedriver en el entorno"""
     try:
-        return asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        return loop
+        # Actualizar repositorios e instalar Chrome
+        subprocess.run(['apt-get', 'update'], check=True)
+        subprocess.run(['apt-get', 'install', '-y', 'chromium-chromedriver'], check=True)
+        subprocess.run(['cp', '/usr/lib/chromium-browser/chromedriver', '/usr/bin'], check=True)
+        return True
+    except Exception as e:
+        st.error(f"Error installing Chrome: {str(e)}")
+        return False
 
-async def setup_browser(device_type, custom_width=None, custom_height=None):
-    """Configura y retorna un navegador con las opciones especificadas"""
+def setup_driver(device_type, custom_width=None, custom_height=None):
+    """Configura y retorna un webdriver de Chrome con las opciones especificadas"""
     try:
+        # Instalar Chrome si es necesario
+        install_chrome()
+        
         # Configuraciones de dispositivo
         device_profiles = {
             "desktop": {"width": 1920, "height": 1080},
@@ -34,59 +45,107 @@ async def setup_browser(device_type, custom_width=None, custom_height=None):
         width = device_profiles[device_type]["width"]
         height = device_profiles[device_type]["height"]
         
-        # Configurar opciones del navegador
-        browser = await launch(
-            headless=True,
-            args=[
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                f'--window-size={width},{height}'
-            ],
-            ignoreHTTPSErrors=True,
-            handleSIGINT=False,
-            handleSIGTERM=False,
-            handleSIGHUP=False
-        )
+        # Configurar opciones de Chrome
+        chrome_options = Options()
+        chrome_options.add_argument('--headless=new')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--disable-gpu')
+        chrome_options.add_argument(f'--window-size={width},{height}')
+        chrome_options.add_argument('--disable-extensions')
+        chrome_options.add_argument('--disable-infobars')
+        chrome_options.add_argument('--disable-notifications')
         
-        page = await browser.newPage()
-        await page.setViewport({'width': width, 'height': height})
+        # Configurar el servicio de Chrome
+        service = Service('/usr/bin/chromedriver')
         
-        return browser, page, width, height
+        # Inicializar el driver
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver.set_window_size(width, height)
+        
+        return driver, width, height
     except Exception as e:
-        st.error(f"Error setting up browser: {str(e)}")
+        st.error(f"Error setting up Chrome driver: {str(e)}")
         raise e
 
-async def capture_screenshot(page, url, output_path, width, height):
+def handle_popups(driver):
+    """Maneja diferentes tipos de pop-ups y cookies"""
+    try:
+        # Lista de selectores comunes para botones de cookies y pop-ups
+        selectors = [
+            "//button[contains(translate(., 'ACCEPT', 'accept'), 'accept')]",
+            "//button[contains(translate(., 'AGREE', 'agree'), 'agree')]",
+            "//button[contains(translate(., 'ALLOW', 'allow'), 'allow')]",
+            "//button[contains(., 'Got it')]",
+            "//button[contains(., 'Close')]",
+            "//button[contains(@class, 'close')]",
+            "//div[contains(@class, 'close')]",
+            "//button[contains(@class, 'cookie-accept')]",
+            "//button[contains(@class, 'accept-cookies')]"
+        ]
+        
+        for selector in selectors:
+            try:
+                elements = driver.find_elements(By.XPATH, selector)
+                for element in elements:
+                    if element.is_displayed():
+                        element.click()
+                        time.sleep(0.5)
+            except:
+                continue
+                
+        time.sleep(1)
+    except:
+        pass
+
+def capture_screenshot(driver, url, output_path, width, height):
     """Captura un screenshot de la URL especificada"""
     try:
         # Navegar a la URL
-        await page.goto(url, {'waitUntil': 'networkidle0', 'timeout': 30000})
+        driver.get(url)
         
-        # Esperar un poco más para contenido dinámico
-        await asyncio.sleep(2)
+        # Esperar a que la página cargue
+        time.sleep(5)
         
-        # Obtener altura total de la página
-        total_height = await page.evaluate("""
-            Math.max(
-                document.body.scrollHeight,
-                document.documentElement.scrollHeight,
-                document.body.offsetHeight,
-                document.documentElement.offsetHeight,
-                document.body.clientHeight,
-                document.documentElement.clientHeight
-            )
-        """)
+        try:
+            # Manejar pop-ups y cookies
+            handle_popups(driver)
+        except Exception as e:
+            st.warning(f"Warning handling popups: {str(e)}")
         
-        # Ajustar viewport para captura completa
-        await page.setViewport({"width": width, "height": total_height})
+        try:
+            # Obtener altura total de la página
+            total_height = driver.execute_script("""
+                return Math.max(
+                    document.body.scrollHeight,
+                    document.documentElement.scrollHeight,
+                    document.body.offsetHeight,
+                    document.documentElement.offsetHeight,
+                    document.body.clientHeight,
+                    document.documentElement.clientHeight
+                );
+            """)
+            
+            # Ajustar tamaño de la ventana
+            driver.set_window_size(width, total_height)
+            
+            # Limpiar elementos flotantes
+            driver.execute_script("""
+                document.querySelectorAll('*').forEach(el => {
+                    const style = window.getComputedStyle(el);
+                    if (style.position === 'fixed' || style.position === 'sticky') {
+                        el.style.display = 'none';
+                    }
+                });
+            """)
+        except Exception as e:
+            st.warning(f"Warning adjusting page: {str(e)}")
         
         # Asegurar que el directorio existe
         os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else '.', exist_ok=True)
         
-        # Tomar screenshot
-        await page.screenshot({'path': output_path, 'fullPage': True})
+        # Tomar y guardar screenshot
+        driver.save_screenshot(output_path)
         
         # Verificar que el archivo se creó correctamente
         if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
@@ -216,9 +275,6 @@ https://www.another-example.com
             total_captures = len([url for url in urls if url.strip()]) * len(devices)
             current_capture = 0
             
-            # Obtener el event loop
-            loop = get_event_loop()
-            
             for url in urls:
                 if not url.strip():
                     continue
@@ -235,23 +291,15 @@ https://www.another-example.com
                         progress_container.progress(progress)
                         message_container.info(get_loading_message())
                         
-                        # Configurar navegador y capturar screenshot
-                        browser, page, width, height = loop.run_until_complete(
-                            setup_browser(device, custom_width, custom_height)
-                        )
-                        
+                        driver, width, height = setup_driver(device, custom_width, custom_height)
                         safe_filename = sanitize_filename(url)
                         output_path = os.path.join(temp_dir, f"{safe_filename}_{device}.png")
                         
-                        success = loop.run_until_complete(
-                            capture_screenshot(page, url, output_path, width, height)
-                        )
-                        
-                        if success:
+                        if capture_screenshot(driver, url, output_path, width, height):
                             screenshot_paths.append(output_path)
-                        
-                        # Cerrar navegador
-                        loop.run_until_complete(browser.close())
+                            
+                        # Cerrar el driver
+                        driver.quit()
                             
                     except Exception as e:
                         st.error(f"Error capturing {url} ({device}): {str(e)}")
