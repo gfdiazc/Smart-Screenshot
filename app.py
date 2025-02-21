@@ -17,6 +17,8 @@ import random
 from PIL import Image
 import pandas as pd
 import tempfile
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
 
 def get_proxy():
     try:
@@ -348,127 +350,199 @@ def sanitize_filename(url):
     # Limitar la longitud del nombre del archivo
     return url[:50]
 
+def extract_urls(url):
+    """Extrae las URLs principales de una página web"""
+    try:
+        driver = None
+        urls = set()
+        try:
+            driver, _, _ = setup_driver()
+            driver.get(url)
+            
+            # Esperar a que la página cargue
+            WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
+            
+            # Obtener el HTML después de que JavaScript haya modificado la página
+            html = driver.page_source
+            soup = BeautifulSoup(html, 'lxml')
+            
+            # Obtener el dominio base
+            base_domain = urlparse(url).netloc
+            
+            # Encontrar todos los enlaces
+            for link in soup.find_all('a', href=True):
+                href = link.get('href')
+                # Convertir URLs relativas a absolutas
+                full_url = urljoin(url, href)
+                # Filtrar URLs del mismo dominio y eliminar fragmentos
+                parsed_url = urlparse(full_url)
+                if parsed_url.netloc == base_domain and parsed_url.scheme in ['http', 'https']:
+                    # Eliminar fragmentos y parámetros de consulta
+                    clean_url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}"
+                    if clean_url != url:  # Excluir la URL original
+                        urls.add(clean_url)
+            
+            return sorted(list(urls))
+            
+        except Exception as e:
+            st.warning(f"Error extracting URLs: {str(e)}")
+            return []
+            
+        finally:
+            if driver:
+                driver.quit()
+                
+    except Exception as e:
+        st.error(f"Critical error: {str(e)}")
+        return []
+
 def main():
     st.title("📸 Smart Screenshot Capture")
     st.markdown("""
     Capture screenshots of any website in different device sizes. Perfect for responsive design testing and documentation.
     """)
     
-    # Inicializar session_state para screenshots
+    # Inicializar session_state
     if 'temp_dir' not in st.session_state:
         st.session_state.temp_dir = None
     if 'screenshot_paths' not in st.session_state:
         st.session_state.screenshot_paths = []
+    if 'extracted_urls' not in st.session_state:
+        st.session_state.extracted_urls = []
+    if 'selected_urls' not in st.session_state:
+        st.session_state.selected_urls = []
     
-    # URL Input with help text
-    urls = st.text_area(
-        "Enter URLs (one per line):",
-        help="Enter the complete URLs of the websites you want to capture. Example: https://www.example.com",
-        placeholder="""https://www.example.com
-https://www.another-example.com
-""",
-    ).split("\n")
-    
-    # Device selection with detailed help
-    st.markdown("### Device Settings")
-    devices = st.multiselect(
-        "Select devices:",
-        ["desktop", "mobile", "tablet", "custom"],
-        default=["desktop"],
-        help="""
-        - Desktop: 1920x1080px
-        - Mobile: 375x812px (iPhone X)
-        - Tablet: 768x1024px (iPad)
-        - Custom: Define your own dimensions
-        """
+    # URL Input
+    base_url = st.text_input(
+        "Enter website URL:",
+        help="Enter the main URL of the website you want to analyze. Example: https://www.example.com",
+        placeholder="https://www.example.com"
     )
     
-    # Custom device configuration
-    custom_width = None
-    custom_height = None
-    if "custom" in devices:
-        st.markdown("#### Custom Device Settings")
-        col1, col2 = st.columns(2)
-        with col1:
-            custom_width = st.number_input(
-                "Custom width (px):",
-                min_value=400,
-                value=1200,
-                help="Minimum width is 400px"
-            )
-        with col2:
-            custom_height = st.number_input(
-                "Custom height (px):",
-                min_value=600,
-                value=3000,
-                help="Minimum height is 600px"
-            )
+    # Extract URLs button
+    if st.button("🔍 Extract URLs", help="Click to extract main URLs from the website"):
+        with st.spinner("Extracting URLs... This may take a moment."):
+            if base_url:
+                if not base_url.startswith(('http://', 'https://')):
+                    base_url = 'https://' + base_url
+                st.session_state.extracted_urls = extract_urls(base_url)
+                if st.session_state.extracted_urls:
+                    st.success(f"Found {len(st.session_state.extracted_urls)} URLs!")
+                else:
+                    st.warning("No URLs found. Please check the website URL and try again.")
     
-    # Advanced options in an expander
-    with st.expander("ℹ️ Tips & Information"):
-        st.markdown("""
-        ### Usage Tips
-        - Make sure to include the full URL (including http:// or https://)
-        - The tool will automatically handle cookies and pop-ups
-        - For best results, wait until all screenshots are processed
+    # Show extracted URLs
+    if st.session_state.extracted_urls:
+        st.markdown("### 🌐 Found URLs")
         
-        ### Supported Features
-        - Multi-device capture
-        - Cookie consent handling
-        - Pop-up management
-        - Full page screenshots
-        - Batch processing
+        # URL selection
+        selected_urls = st.multiselect(
+            "Select URLs to capture:",
+            st.session_state.extracted_urls,
+            default=st.session_state.selected_urls,
+            help="Select the URLs you want to capture screenshots of."
+        )
+        st.session_state.selected_urls = selected_urls
         
-        ### Output
-        - Screenshots are saved in PNG format
-        - Download individual images or all as ZIP
-        - Images are named using the website's URL and device type
-        """)
-    
-    # Capture button with processing indicator
-    if st.button("📸 Capture Screenshots", help="Click to start capturing screenshots of all entered URLs"):
-        status_container = st.empty()
-        progress_container = st.empty()
-        message_container = st.empty()
-        
-        with st.spinner("Processing screenshots... This may take a few moments."):
-            # Crear nuevo directorio temporal solo si no existe
-            if not st.session_state.temp_dir:
-                st.session_state.temp_dir = tempfile.mkdtemp()
-                st.session_state.screenshot_paths = []
+        if selected_urls:
+            # Device selection with detailed help
+            st.markdown("### 📱 Device Settings")
+            devices = st.multiselect(
+                "Select devices:",
+                ["desktop", "mobile", "tablet", "custom"],
+                default=["desktop"],
+                help="""
+                - Desktop: 1920x1080px
+                - Mobile: 375x812px (iPhone X)
+                - Tablet: 768x1024px (iPad)
+                - Custom: Define your own dimensions
+                """
+            )
             
-            # Progress tracking
-            total_captures = len([url for url in urls if url.strip()]) * len(devices)
-            current_capture = 0
+            # Custom device configuration
+            custom_width = None
+            custom_height = None
+            if "custom" in devices:
+                st.markdown("#### Custom Device Settings")
+                col1, col2 = st.columns(2)
+                with col1:
+                    custom_width = st.number_input(
+                        "Custom width (px):",
+                        min_value=400,
+                        value=1200,
+                        help="Minimum width is 400px"
+                    )
+                with col2:
+                    custom_height = st.number_input(
+                        "Custom height (px):",
+                        min_value=600,
+                        value=3000,
+                        help="Minimum height is 600px"
+                    )
             
-            for url in urls:
-                if not url.strip():
-                    continue
+            # Advanced options in an expander
+            with st.expander("ℹ️ Tips & Information"):
+                st.markdown("""
+                ### Usage Tips
+                - URLs are automatically extracted from the main website
+                - Select the specific URLs you want to capture
+                - The tool will automatically handle cookies and pop-ups
+                - For best results, wait until all screenshots are processed
                 
-                if not url.startswith(('http://', 'https://')):
-                    url = 'https://' + url.strip()
+                ### Supported Features
+                - URL extraction and filtering
+                - Multi-device capture
+                - Cookie consent handling
+                - Pop-up management
+                - Full page screenshots
+                - Batch processing
                 
-                for device in devices:
-                    try:
-                        # Update progress and show fun message
-                        current_capture += 1
-                        progress = current_capture / total_captures
-                        status_container.text(f"Processing: {url} ({device})")
-                        progress_container.progress(progress)
-                        message_container.info(get_loading_message())
-                        
-                        screenshot_path = capture_screenshot(url, device)
-                        
-                        if screenshot_path and screenshot_path not in st.session_state.screenshot_paths:
-                            st.session_state.screenshot_paths.append(screenshot_path)
-                            
-                    except Exception as e:
-                        st.error(f"Error capturing {url} ({device}): {str(e)}")
+                ### Output
+                - Screenshots are saved in PNG format
+                - Download individual images or all as ZIP
+                - Images are named using the website's URL and device type
+                """)
             
-            # Clear progress indicators
-            status_container.empty()
-            progress_container.empty()
-            message_container.empty()
+            # Capture button
+            if st.button("📸 Capture Screenshots", help="Click to start capturing screenshots of selected URLs"):
+                status_container = st.empty()
+                progress_container = st.empty()
+                message_container = st.empty()
+                
+                with st.spinner("Processing screenshots... This may take a few moments."):
+                    # Crear nuevo directorio temporal solo si no existe
+                    if not st.session_state.temp_dir:
+                        st.session_state.temp_dir = tempfile.mkdtemp()
+                        st.session_state.screenshot_paths = []
+                    
+                    # Progress tracking
+                    total_captures = len(selected_urls) * len(devices)
+                    current_capture = 0
+                    
+                    for url in selected_urls:
+                        for device in devices:
+                            try:
+                                # Update progress and show fun message
+                                current_capture += 1
+                                progress = current_capture / total_captures
+                                status_container.text(f"Processing: {url} ({device})")
+                                progress_container.progress(progress)
+                                message_container.info(get_loading_message())
+                                
+                                screenshot_path = capture_screenshot(url, device)
+                                
+                                if screenshot_path and screenshot_path not in st.session_state.screenshot_paths:
+                                    st.session_state.screenshot_paths.append(screenshot_path)
+                                    
+                            except Exception as e:
+                                st.error(f"Error capturing {url} ({device}): {str(e)}")
+                    
+                    # Clear progress indicators
+                    status_container.empty()
+                    progress_container.empty()
+                    message_container.empty()
     
     # Show results if there are screenshots
     if st.session_state.screenshot_paths:
