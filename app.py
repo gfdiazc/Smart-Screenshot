@@ -29,12 +29,15 @@ def get_proxy():
 
 def setup_driver():
     options = Options()
-    options.add_argument('--headless')
+    options.add_argument('--headless=new')  # Nueva versión de headless
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
     options.add_argument('--disable-infobars')
     options.add_argument('--disable-notifications')
+    options.add_argument('--window-size=1920,1080')
+    options.add_argument('--start-maximized')
+    options.add_argument('--force-device-scale-factor=1')
     
     # Set Chrome binary path for Streamlit Cloud
     options.binary_location = '/usr/bin/chromium'
@@ -54,11 +57,21 @@ def setup_driver():
     options.add_experimental_option('excludeSwitches', ['enable-automation'])
     options.add_experimental_option('useAutomationExtension', False)
     
-    # Additional options for stability
+    # Additional options for stability and rendering
     options.add_argument('--disable-extensions')
     options.add_argument('--disable-software-rasterizer')
     options.add_argument('--ignore-certificate-errors')
     options.add_argument('--allow-running-insecure-content')
+    options.add_argument('--disable-web-security')
+    options.add_argument('--enable-javascript')
+    options.add_argument('--hide-scrollbars')
+    options.add_argument('--disable-popup-blocking')
+    options.add_argument('--disable-notifications')
+    
+    # Performance options
+    options.add_argument('--disable-dev-tools')
+    options.add_argument('--dns-prefetch-disable')
+    options.add_argument('--disable-features=IsolateOrigins,site-per-process')
     
     # Create driver with service
     service = Service('/usr/bin/chromedriver')
@@ -76,6 +89,11 @@ def setup_driver():
     
     # Set window size
     driver.set_window_size(1920, 1080)
+    
+    # Establecer timeouts
+    driver.set_page_load_timeout(30)
+    driver.implicitly_wait(10)
+    
     return driver, 1920, 1080
 
 def get_loading_message():
@@ -109,23 +127,87 @@ def capture_screenshot(url, device_profile="desktop"):
             # Load page with timeout and wait for content
             driver.set_page_load_timeout(30)
             driver.get(url)
-            time.sleep(random.uniform(3, 5))  # Random wait to appear more human-like
             
-            # Wait for page to be fully loaded
+            # Esperar a que la página cargue completamente
             WebDriverWait(driver, 20).until(
                 EC.presence_of_element_located((By.TAG_NAME, "body"))
             )
             
-            # Take screenshot
+            # Esperar un tiempo adicional para contenido dinámico
+            time.sleep(5)
+            
+            # Scroll para cargar contenido lazy
+            total_height = driver.execute_script("return Math.max( document.body.scrollHeight, document.body.offsetHeight, document.documentElement.clientHeight, document.documentElement.scrollHeight, document.documentElement.offsetHeight );")
+            viewport_height = driver.execute_script("return window.innerHeight")
+            slices = 3
+            slice_height = total_height // slices
+            
+            # Scroll suave por la página
+            for i in range(slices):
+                driver.execute_script(f"window.scrollTo(0, {i * slice_height});")
+                time.sleep(1)
+            
+            # Volver al inicio
+            driver.execute_script("window.scrollTo(0, 0);")
+            time.sleep(2)
+            
+            # Intentar cerrar pop-ups o cookies si existen
+            try:
+                # Lista de selectores comunes para botones de cookies y pop-ups
+                selectors = [
+                    "//button[contains(., 'Accept')]",
+                    "//button[contains(., 'Aceptar')]",
+                    "//button[contains(., 'Accept All')]",
+                    "//button[contains(., 'Aceptar todo')]",
+                    "//button[contains(., 'Close')]",
+                    "//button[contains(., 'Cerrar')]",
+                    "//div[contains(@class, 'cookie')]//button",
+                    "//div[contains(@class, 'popup')]//button",
+                ]
+                
+                for selector in selectors:
+                    try:
+                        elements = driver.find_elements(By.XPATH, selector)
+                        for element in elements:
+                            if element.is_displayed():
+                                element.click()
+                                time.sleep(0.5)
+                    except:
+                        continue
+            except:
+                pass
+            
+            # Esperar un momento después de manejar pop-ups
+            time.sleep(2)
+            
+            # Ocultar elementos flotantes que puedan interferir
+            driver.execute_script("""
+                document.querySelectorAll('*').forEach(el => {
+                    const style = window.getComputedStyle(el);
+                    if (style.position === 'fixed' || style.position === 'sticky') {
+                        el.style.display = 'none';
+                    }
+                });
+            """)
+            
+            time.sleep(1)
+            
+            # Tomar screenshot
             driver.save_screenshot(screenshot_path)
             
-            # Verify screenshot was taken
+            # Verificar que se guardó correctamente
             if not os.path.exists(screenshot_path):
                 raise Exception("Screenshot was not saved")
                 
-            # Open and verify image
+            # Verificar que la imagen es válida
             img = Image.open(screenshot_path)
             img.verify()
+            
+            # Verificar que la imagen no está en blanco
+            img = Image.open(screenshot_path)
+            extrema = img.convert("L").getextrema()
+            if extrema[0] == extrema[1]:  # Si min y max son iguales, la imagen está en blanco
+                raise Exception("Captured image is blank")
             
             return screenshot_path
             
