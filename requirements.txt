@@ -1,0 +1,7 @@
+streamlit==1.32.0
+selenium==4.19.0
+webdriver-manager==4.0.1
+pillow==10.2.0
+pandas==2.2.0
+undetected-chromedriver==3.5.5
+chromium-chromedriver==133.0.0
