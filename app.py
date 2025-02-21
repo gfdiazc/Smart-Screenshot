@@ -1,313 +1,113 @@
 import streamlit as st
-import tempfile
 import os
-import zipfile
 import time
-import pandas as pd
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import re
-import random
-from PIL import Image
-from selenium.webdriver.common.action_chains import ActionChains
 from fake_useragent import UserAgent
 from selenium_stealth import stealth
 import requests
+import json
+import random
+from PIL import Image
+import pandas as pd
+import tempfile
 
 def get_proxy():
-    """Obtiene una lista de proxies y retorna uno aleatorio"""
     try:
-        # Obtener lista de proxies
-        proxy_url = "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt"
-        response = requests.get(proxy_url)
-        proxies = response.text.strip().split('\n')
-        
-        # Seleccionar un proxy aleatorio
-        proxy = random.choice(proxies)
-        return f"http://{proxy}"
+        response = requests.get('https://proxylist.geonode.com/api/proxy-list?limit=100&page=1&sort_by=lastChecked&sort_type=desc&protocols=http%2Chttps&anonymityLevel=elite&anonymityLevel=anonymous')
+        data = response.json()
+        proxies = [f"{proxy['ip']}:{proxy['port']}" for proxy in data['data']]
+        return random.choice(proxies) if proxies else None
     except:
         return None
 
-def setup_driver(device_type, custom_width=None, custom_height=None):
-    """Configura y retorna un webdriver de Chrome con las opciones especificadas"""
-    try:
-        # Configuraciones de dispositivo
-        device_profiles = {
-            "desktop": {"width": 1920, "height": 1080},
-            "mobile": {"width": 375, "height": 812},
-            "tablet": {"width": 768, "height": 1024},
-            "custom": {"width": custom_width, "height": custom_height}
-        }
-        
-        # Obtener dimensiones del dispositivo
-        width = device_profiles[device_type]["width"]
-        height = device_profiles[device_type]["height"]
-        
-        # Generar User Agent aleatorio
-        ua = UserAgent()
-        user_agent = ua.random
-        
-        # Configurar opciones de Chrome
-        chrome_options = Options()
-        chrome_options.add_argument('--headless=new')
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
-        chrome_options.add_argument('--disable-gpu')
-        chrome_options.add_argument(f'--window-size={width},{height}')
-        chrome_options.add_argument('--disable-extensions')
-        chrome_options.add_argument('--disable-notifications')
-        chrome_options.add_argument('--disable-blink-features=AutomationControlled')
-        chrome_options.add_argument('--disable-web-security')
-        chrome_options.add_argument('--ignore-certificate-errors')
-        chrome_options.add_argument('--lang=es-ES,es')
-        chrome_options.add_argument(f'--user-agent={user_agent}')
-        
-        # Intentar usar un proxy
-        proxy = get_proxy()
-        if proxy:
-            chrome_options.add_argument(f'--proxy-server={proxy}')
-        
-        # Configuraciones experimentales
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
-        chrome_options.add_experimental_option('prefs', {
-            'profile.default_content_setting_values.notifications': 2,
-            'profile.default_content_settings.popups': 0,
-            'download.prompt_for_download': False,
-            'credentials_enable_service': False,
-            'profile.password_manager_enabled': False
-        })
-        
-        chrome_options.binary_location = '/usr/bin/chromium'
-        
-        # Configurar el servicio de Chrome
-        service = Service('/usr/lib/chromium-browser/chromedriver')
-        
-        # Inicializar el driver
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-        
-        # Aplicar técnicas de evasión de Selenium Stealth
-        stealth(
-            driver,
-            user_agent=user_agent,
-            languages=["es-ES", "es"],
-            vendor="Google Inc.",
-            platform="Win32",
-            webgl_vendor="Intel Inc.",
-            renderer="Intel Iris OpenGL Engine",
-            fix_hairline=True,
-            run_on_insecure_origins=True
-        )
-        
-        # Configurar el tamaño de la ventana
-        driver.set_window_size(width, height)
-        
-        # Ejecutar JavaScript adicional para evasión
-        driver.execute_cdp_cmd('Network.setUserAgentOverride', {"userAgent": user_agent})
-        driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
-            "source": """
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined
-                });
-                Object.defineProperty(navigator, 'plugins', {
-                    get: () => [1, 2, 3, 4, 5].map(() => ({
-                        name: ['Chrome PDF Plugin', 'Chrome PDF Viewer', 'Native Client'][Math.floor(Math.random() * 3)]
-                    }))
-                });
-                window.chrome = {
-                    runtime: {}
-                };
-                Object.defineProperty(navigator, 'permissions', {
-                    get: () => ({
-                        query: Promise.resolve({state: Notification.permission})
-                    })
-                });
-            """
-        })
-        
-        return driver, width, height
-    except Exception as e:
-        st.error(f"Error setting up Chrome driver: {str(e)}")
-        raise e
+def setup_driver():
+    options = Options()
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--disable-infobars')
+    options.add_argument('--disable-notifications')
+    
+    # Random user agent
+    ua = UserAgent()
+    user_agent = ua.random
+    options.add_argument(f'user-agent={user_agent}')
+    
+    # Add proxy if available
+    proxy = get_proxy()
+    if proxy:
+        options.add_argument(f'--proxy-server={proxy}')
+    
+    # Additional evasion options
+    options.add_argument('--disable-blink-features=AutomationControlled')
+    options.add_experimental_option('excludeSwitches', ['enable-automation'])
+    options.add_experimental_option('useAutomationExtension', False)
+    
+    driver = webdriver.Chrome(options=options)
+    
+    # Apply stealth settings
+    stealth(driver,
+        languages=["en-US", "en"],
+        vendor="Google Inc.",
+        platform="Win32",
+        webgl_vendor="Intel Inc.",
+        renderer="Intel Iris OpenGL Engine",
+        fix_hairline=True,
+    )
+    
+    # Set window size
+    driver.set_window_size(1920, 1080)
+    return driver, 1920, 1080
 
-def handle_popups(driver):
-    """Maneja diferentes tipos de pop-ups y cookies"""
+def capture_screenshot(url, device_profile="desktop"):
     try:
-        # Lista de selectores comunes para botones de cookies y pop-ups
-        selectors = [
-            "//button[contains(translate(., 'ACCEPT', 'accept'), 'accept')]",
-            "//button[contains(translate(., 'AGREE', 'agree'), 'agree')]",
-            "//button[contains(translate(., 'ALLOW', 'allow'), 'allow')]",
-            "//button[contains(., 'Got it')]",
-            "//button[contains(., 'Close')]",
-            "//button[contains(@class, 'close')]",
-            "//div[contains(@class, 'close')]",
-            "//button[contains(@class, 'cookie-accept')]",
-            "//button[contains(@class, 'accept-cookies')]"
-        ]
-        
-        for selector in selectors:
-            try:
-                elements = driver.find_elements(By.XPATH, selector)
-                for element in elements:
-                    if element.is_displayed():
-                        element.click()
-                        time.sleep(0.5)
-            except:
-                continue
-                
-        time.sleep(1)
-    except:
-        pass
-
-def capture_screenshot(driver, url, output_path, width, height):
-    """Captura un screenshot de la URL especificada"""
-    try:
-        # Simular comportamiento humano antes de cargar la página
-        time.sleep(random.uniform(1, 2))
-        
-        # Navegar a la URL
-        driver.get(url)
-        
-        # Esperar a que la página cargue completamente
-        WebDriverWait(driver, 20).until(
-            lambda d: d.execute_script('return document.readyState') == 'complete'
-        )
-        
-        # Simular movimiento aleatorio del mouse
-        actions = ActionChains(driver)
-        for _ in range(3):
-            x = random.randint(0, width)
-            y = random.randint(0, height)
-            actions.move_by_offset(x, y)
-            actions.pause(random.uniform(0.1, 0.3))
-        actions.perform()
+        driver = None
+        temp_dir = tempfile.mkdtemp()
+        screenshot_path = os.path.join(temp_dir, "screenshot.png")
         
         try:
-            # Manejar pop-ups y cookies con tiempo de espera aleatorio
-            handle_popups(driver)
-            time.sleep(random.uniform(0.5, 1))
-        except Exception as e:
-            st.warning(f"Warning handling popups: {str(e)}")
-        
-        try:
-            # Simular scroll humano
-            total_height = driver.execute_script("""
-                return Math.max(
-                    document.body.scrollHeight,
-                    document.documentElement.scrollHeight,
-                    document.body.offsetHeight,
-                    document.documentElement.offsetHeight,
-                    document.body.clientHeight,
-                    document.documentElement.clientHeight
-                );
-            """)
+            driver, width, height = setup_driver()
             
-            # Scroll suave con velocidad variable
-            current_height = 0
-            while current_height < total_height:
-                # Calcular un paso aleatorio entre 100 y 300 píxeles
-                step = random.randint(100, 300)
-                current_height += step
+            # Load page with timeout and wait for content
+            driver.set_page_load_timeout(30)
+            driver.get(url)
+            time.sleep(random.uniform(3, 5))  # Random wait to appear more human-like
+            
+            # Wait for page to be fully loaded
+            WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
+            
+            # Take screenshot
+            driver.save_screenshot(screenshot_path)
+            
+            # Verify screenshot was taken
+            if not os.path.exists(screenshot_path):
+                raise Exception("Screenshot was not saved")
                 
-                # Scroll suave con aceleración y desaceleración
-                driver.execute_script(f"""
-                    window.scrollTo({{
-                        top: {current_height},
-                        behavior: 'smooth'
-                    }});
-                """)
-                
-                # Pausa aleatoria entre scrolls
-                time.sleep(random.uniform(0.2, 0.5))
-                
-                # Simular pausa ocasional para "leer"
-                if random.random() < 0.2:  # 20% de probabilidad
-                    time.sleep(random.uniform(0.5, 1.5))
+            # Open and verify image
+            img = Image.open(screenshot_path)
+            img.verify()
             
-            # Volver al inicio suavemente
-            driver.execute_script("""
-                window.scrollTo({
-                    top: 0,
-                    behavior: 'smooth'
-                });
-            """)
-            time.sleep(random.uniform(0.5, 1))
-            
-            # Ajustar tamaño de la ventana
-            driver.set_window_size(width, total_height)
-            
-            # Limpiar elementos flotantes
-            driver.execute_script("""
-                document.querySelectorAll('*').forEach(el => {
-                    const style = window.getComputedStyle(el);
-                    if (style.position === 'fixed' || style.position === 'sticky') {
-                        el.style.display = 'none';
-                    }
-                });
-            """)
-            
-            # Esperar a que los elementos flotantes se oculten
-            time.sleep(random.uniform(0.3, 0.7))
+            return screenshot_path
             
         except Exception as e:
-            st.warning(f"Warning adjusting page: {str(e)}")
-        
-        # Esperar un poco más antes de capturar
-        time.sleep(random.uniform(0.5, 1))
-        
-        # Asegurar que el directorio existe
-        os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else '.', exist_ok=True)
-        
-        # Tomar y guardar screenshot
-        driver.save_screenshot(output_path)
-        
-        # Verificar que el archivo se creó correctamente
-        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-            return True
-        else:
-            st.error("Screenshot file was not created or is empty")
-            return False
+            st.warning(f"Error capturing screenshot: {str(e)}")
+            return None
             
+        finally:
+            if driver:
+                driver.quit()
+                
     except Exception as e:
-        st.error(f"Error capturing screenshot: {str(e)}")
-        return False
-
-def sanitize_filename(url):
-    # Eliminar el protocolo (http:// o https://)
-    url = re.sub(r'^https?://', '', url)
-    # Eliminar caracteres no válidos para nombres de archivo
-    url = re.sub(r'[<>:"/\\|?*]', '_', url)
-    # Limitar la longitud del nombre del archivo
-    return url[:50]
-
-def get_loading_message():
-    """Retorna un mensaje aleatorio divertido durante la carga"""
-    messages = [
-        "🎨 Making your screenshots pixel-perfect...",
-        "🚀 Zooming through the internet...",
-        "🎭 Dealing with those pesky pop-ups...",
-        "🍪 Handling cookies (the digital ones, not the tasty ones)...",
-        "📱 Teaching your website to pose for different devices...",
-        "🎯 Capturing the perfect shot...",
-        "🎪 Juggling with different screen sizes...",
-        "🎮 Playing hide and seek with pop-ups...",
-        "🎭 Preparing the website for its photoshoot...",
-        "🎪 Performing website acrobatics...",
-        "🎨 Adding some digital makeup...",
-        "🎯 Taking aim at those tricky elements...",
-        "🚀 Warming up the quantum screenshot engine...",
-        "🎭 Getting the website ready for its close-up...",
-        "🌈 Collecting all the pixels...",
-        "🎪 Training the browser circus...",
-        "🎨 Mixing the perfect pixel palette...",
-        "🎯 Calibrating the screenshot sensors..."
-    ]
-    return random.choice(messages)
+        st.error(f"Critical error: {str(e)}")
+        return None
 
 def main():
     st.title("📸 Smart Screenshot Capture")
