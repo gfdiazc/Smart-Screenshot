@@ -3,7 +3,7 @@ import tempfile
 import os
 import zipfile
 import time
-from seleniumwire import webdriver
+from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
@@ -15,6 +15,20 @@ from webdriver_manager.chrome import ChromeDriverManager
 from PIL import Image
 import re
 import random
+import subprocess
+
+def install_chrome():
+    """Instala Chrome en el servidor si no está instalado"""
+    try:
+        # Intentar instalar Chrome
+        subprocess.run(['apt-get', 'update'], check=True)
+        subprocess.run(['apt-get', 'install', '-y', 'wget'], check=True)
+        subprocess.run(['wget', 'https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb'], check=True)
+        subprocess.run(['apt-get', 'install', '-y', './google-chrome-stable_current_amd64.deb'], check=True)
+        return True
+    except Exception as e:
+        st.error(f"Error installing Chrome: {str(e)}")
+        return False
 
 def sanitize_filename(url):
     # Eliminar el protocolo (http:// o https://)
@@ -27,6 +41,9 @@ def sanitize_filename(url):
 def setup_driver(device_type, custom_width=None, custom_height=None):
     """Configura y retorna un webdriver de Chrome con las opciones especificadas"""
     try:
+        # Asegurar que Chrome está instalado
+        install_chrome()
+        
         # Configuración de Chrome Options
         chrome_options = Options()
         chrome_options.add_argument("--headless=new")
@@ -56,19 +73,9 @@ def setup_driver(device_type, custom_width=None, custom_height=None):
         else:
             chrome_options.add_argument(f"--window-size={custom_width},{custom_height}")
         
-        # Configurar selenium-wire
-        seleniumwire_options = {
-            'verify_ssl': False,  # No verificar certificados SSL
-            'suppress_connection_errors': True  # Suprimir errores de conexión
-        }
-        
-        # Inicializar el driver con selenium-wire
+        # Inicializar el driver
         service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(
-            service=service,
-            options=chrome_options,
-            seleniumwire_options=seleniumwire_options
-        )
+        driver = webdriver.Chrome(service=service, options=chrome_options)
         
         return driver, width, height
     except Exception as e:
