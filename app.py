@@ -181,6 +181,12 @@ def main():
     Capture screenshots of any website in different device sizes. Perfect for responsive design testing and documentation.
     """)
     
+    # Inicializar session_state para screenshots
+    if 'temp_dir' not in st.session_state:
+        st.session_state.temp_dir = None
+    if 'screenshot_paths' not in st.session_state:
+        st.session_state.screenshot_paths = []
+    
     # URL Input with help text
     urls = st.text_area(
         "Enter URLs (one per line):",
@@ -253,8 +259,10 @@ https://www.another-example.com
         message_container = st.empty()
         
         with st.spinner("Processing screenshots... This may take a few moments."):
-            temp_dir = tempfile.mkdtemp()
-            screenshot_paths = []
+            # Crear nuevo directorio temporal solo si no existe
+            if not st.session_state.temp_dir:
+                st.session_state.temp_dir = tempfile.mkdtemp()
+                st.session_state.screenshot_paths = []
             
             # Progress tracking
             total_captures = len([url for url in urls if url.strip()]) * len(devices)
@@ -278,10 +286,11 @@ https://www.another-example.com
                         
                         driver, width, height = setup_driver(device, custom_width, custom_height)
                         safe_filename = sanitize_filename(url)
-                        output_path = os.path.join(temp_dir, f"{safe_filename}_{device}.png")
+                        output_path = os.path.join(st.session_state.temp_dir, f"{safe_filename}_{device}.png")
                         
                         if capture_screenshot(driver, url, output_path, width, height):
-                            screenshot_paths.append(output_path)
+                            if output_path not in st.session_state.screenshot_paths:
+                                st.session_state.screenshot_paths.append(output_path)
                             
                         # Cerrar el driver
                         driver.quit()
@@ -293,75 +302,74 @@ https://www.another-example.com
             status_container.empty()
             progress_container.empty()
             message_container.empty()
-            
-            # Show results
-            if screenshot_paths:
-                st.markdown("### 📊 Results")
+    
+    # Show results if there are screenshots
+    if st.session_state.screenshot_paths:
+        st.markdown("### 📊 Results")
+        
+        # Group screenshots by URL
+        screenshots_by_url = {}
+        for path in st.session_state.screenshot_paths:
+            if os.path.exists(path):  # Verificar que el archivo aún existe
+                filename = os.path.basename(path)
+                url = filename.rsplit('_', 1)[0]  # Separar URL del tipo de dispositivo
+                if url not in screenshots_by_url:
+                    screenshots_by_url[url] = []
+                screenshots_by_url[url].append(path)
+        
+        # Mostrar screenshots agrupados por URL
+        for url, paths in screenshots_by_url.items():
+            with st.expander(f"🌐 Website: {url}", expanded=False):
+                st.markdown("#### Available Screenshots:")
                 
-                # Group screenshots by URL
-                screenshots_by_url = {}
-                for path in screenshot_paths:
-                    filename = os.path.basename(path)
-                    url = filename.rsplit('_', 1)[0]  # Separar URL del tipo de dispositivo
-                    if url not in screenshots_by_url:
-                        screenshots_by_url[url] = []
-                    screenshots_by_url[url].append(path)
+                # Crear tabs para cada dispositivo
+                device_tabs = st.tabs([f"📱 {os.path.basename(path).split('_')[-1].replace('.png', '').title()}" for path in paths])
                 
-                # Mostrar screenshots agrupados por URL
-                for url, paths in screenshots_by_url.items():
-                    with st.expander(f"🌐 Website: {url}", expanded=False):
-                        st.markdown("#### Available Screenshots:")
-                        
-                        # Crear tabs para cada dispositivo
-                        device_tabs = st.tabs([f"📱 {os.path.basename(path).split('_')[-1].replace('.png', '').title()}" for path in paths])
-                        
-                        for tab, path in zip(device_tabs, paths):
-                            if os.path.exists(path):
-                                with tab:
-                                    try:
-                                        st.image(
-                                            path,
-                                            use_container_width=True
-                                        )
-                                        col1, col2 = st.columns([3, 1])
-                                        with col2:
-                                            with open(path, "rb") as f:
-                                                st.download_button(
-                                                    label=f"⬇️ Download",
-                                                    data=f,
-                                                    file_name=os.path.basename(path),
-                                                    help=f"Download screenshot",
-                                                    key=f"dl_{path}",
-                                                    use_container_width=True
-                                                )
-                                    except Exception as e:
-                                        st.error(f"Error displaying image {path}: {str(e)}")
-                        
-                        st.markdown("---")
-                
-                # Create ZIP with all screenshots
-                if len(screenshot_paths) > 0:
-                    st.markdown("### 📦 Batch Download")
-                    zip_path = os.path.join(temp_dir, "screenshots.zip")
-                    with zipfile.ZipFile(zip_path, "w") as zipf:
-                        for file in screenshot_paths:
-                            if os.path.exists(file):
-                                zipf.write(file, os.path.basename(file))
-                    
-                    if os.path.exists(zip_path):
-                        with open(zip_path, "rb") as f:
-                            col1, col2, col3 = st.columns([1, 2, 1])
-                            with col2:
-                                st.download_button(
-                                    label="📥 Download All Screenshots as ZIP",
-                                    data=f,
-                                    file_name="screenshots.zip",
-                                    help="Download all screenshots in a single ZIP file",
-                                    key="dl_all",
+                for tab, path in zip(device_tabs, paths):
+                    if os.path.exists(path):
+                        with tab:
+                            try:
+                                st.image(
+                                    path,
                                     use_container_width=True
                                 )
-            else:
-                st.warning("No screenshots were captured. Please check the URLs and try again.")
+                                col1, col2 = st.columns([3, 1])
+                                with col2:
+                                    with open(path, "rb") as f:
+                                        st.download_button(
+                                            label=f"⬇️ Download",
+                                            data=f,
+                                            file_name=os.path.basename(path),
+                                            help=f"Download screenshot",
+                                            key=f"dl_{path}",
+                                            use_container_width=True
+                                        )
+                            except Exception as e:
+                                st.error(f"Error displaying image {path}: {str(e)}")
+                
+                st.markdown("---")
+        
+        # Create ZIP with all screenshots
+        if len(st.session_state.screenshot_paths) > 0:
+            st.markdown("### 📦 Batch Download")
+            zip_path = os.path.join(st.session_state.temp_dir, "screenshots.zip")
+            with zipfile.ZipFile(zip_path, "w") as zipf:
+                for file in st.session_state.screenshot_paths:
+                    if os.path.exists(file):
+                        zipf.write(file, os.path.basename(file))
+            
+            if os.path.exists(zip_path):
+                with open(zip_path, "rb") as f:
+                    col1, col2, col3 = st.columns([1, 2, 1])
+                    with col2:
+                        st.download_button(
+                            label="📥 Download All Screenshots as ZIP",
+                            data=f,
+                            file_name="screenshots.zip",
+                            help="Download all screenshots in a single ZIP file",
+                            key="dl_all",
+                            use_container_width=True
+                        )
 
 if __name__ == "__main__":
     main()
