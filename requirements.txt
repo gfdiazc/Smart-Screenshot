@@ -3,3 +3,4 @@ playwright[chromium]==1.42.0
 pillow==10.2.0
 pandas==2.2.0
 setuptools==69.1.1
+pyee==11.0.1

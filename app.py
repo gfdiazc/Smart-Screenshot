@@ -12,7 +12,8 @@ import subprocess
 def install_playwright_deps():
     """Instala las dependencias necesarias de Playwright"""
     try:
-        subprocess.run(['playwright', 'install', 'chromium'], check=True)
+        # Instalar solo el navegador chromium
+        subprocess.run(['playwright', 'install', 'chromium', '--with-deps'], check=True)
         return True
     except Exception as e:
         st.error(f"Error installing Playwright dependencies: {str(e)}")
@@ -28,7 +29,27 @@ def setup_browser(device_type, custom_width=None, custom_height=None):
     """Configura y retorna un navegador con las opciones especificadas"""
     try:
         playwright = get_playwright()
-        browser = playwright.chromium.launch()
+        
+        # Configurar opciones del navegador
+        browser_options = {
+            "chromium_sandbox": False,  # Deshabilitar sandbox para entornos sin privilegios
+            "args": [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-accelerated-2d-canvas",
+                "--disable-gpu",
+                "--disable-extensions",
+                "--disable-web-security",
+                "--disable-features=site-per-process",
+                "--disable-software-rasterizer"
+            ]
+        }
+        
+        browser = playwright.chromium.launch(
+            headless=True,  # Asegurar modo headless
+            **browser_options
+        )
         
         # Configuraciones de dispositivo
         device_profiles = {
@@ -43,7 +64,8 @@ def setup_browser(device_type, custom_width=None, custom_height=None):
         height = device_profiles[device_type]["height"]
         
         context = browser.new_context(
-            viewport={'width': width, 'height': height}
+            viewport={'width': width, 'height': height},
+            ignore_https_errors=True  # Ignorar errores HTTPS
         )
         
         return context, browser, width, height
