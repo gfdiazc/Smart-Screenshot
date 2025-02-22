@@ -3,14 +3,7 @@ import os
 import time
 import zipfile
 import re
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from fake_useragent import UserAgent
-from selenium_stealth import stealth
+from playwright.sync_api import sync_playwright
 import requests
 import json
 import random
@@ -29,102 +22,44 @@ def get_proxy():
     except:
         return None
 
-def setup_driver(device_profile="desktop", custom_width=None, custom_height=None):
-    options = Options()
-    
-    # Configuración básica
-    options.add_argument('--headless=new')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--disable-gpu')
-    
-    # Device-specific configuration
-    if device_profile == "mobile":
-        width, height = 375, 812  # iPhone X
-        options.add_argument(f'--window-size={width},{height}')
-        options.add_argument('--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1')
-    elif device_profile == "tablet":
-        width, height = 768, 1024  # iPad
-        options.add_argument(f'--window-size={width},{height}')
-        options.add_argument('--user-agent=Mozilla/5.0 (iPad; CPU OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1')
-    elif device_profile == "custom" and custom_width and custom_height:
-        width, height = custom_width, custom_height
-        options.add_argument(f'--window-size={width},{height}')
-    else:  # desktop
-        width, height = 1920, 1080
-        options.add_argument(f'--window-size={width},{height}')
-        # Random desktop user agent
-        ua = UserAgent()
-        user_agent = ua.random
-        options.add_argument(f'user-agent={user_agent}')
-    
-    # Performance optimizations
-    options.add_argument('--disable-extensions')
-    options.add_argument('--disable-software-rasterizer')
-    options.add_argument('--disable-dev-tools')
-    options.add_argument('--dns-prefetch-disable')
-    
-    # Set Chrome binary path for Streamlit Cloud
-    options.binary_location = '/usr/bin/chromium'
-    
-    # Configurar CDP para evadir detección
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
-    options.add_argument('--disable-blink-features=AutomationControlled')
-    
-    # Add proxy if available
+def setup_browser(playwright, device_profile="desktop", custom_width=None, custom_height=None):
+    # Configuración del navegador
+    browser_args = []
     proxy = get_proxy()
     if proxy:
-        options.add_argument(f'--proxy-server={proxy}')
-    
-    # Create driver with service
-    service = Service('/usr/bin/chromedriver')
-    driver = webdriver.Chrome(service=service, options=options)
-    
-    # Modificar navigator.webdriver
-    driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
-        'source': '''
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined
-            });
-            
-            // Overwrite the 'plugins' property
-            Object.defineProperty(navigator, 'plugins', {
-                get: () => [1, 2, 3].map(() => ({
-                    name: ['Chrome PDF Plugin', 'Chrome PDF Viewer', 'Native Client'][Math.floor(Math.random() * 3)]
-                }))
-            });
-            
-            // Overwrite the 'languages' property
-            Object.defineProperty(navigator, 'languages', {
-                get: () => ['es-ES', 'es', 'en-US', 'en']
-            });
-            
-            // Add chrome object
-            window.chrome = {
-                runtime: {},
-                loadTimes: function() {},
-                csi: function() {},
-                app: {}
-            };
-        '''
-    })
-    
-    # Apply stealth settings
-    stealth(driver,
-        languages=["es-ES", "es", "en-US", "en"],
-        vendor="Google Inc.",
-        platform="Win32",
-        webgl_vendor="Intel Inc.",
-        renderer="Intel Iris OpenGL Engine",
-        fix_hairline=True,
+        browser_args.append(f'--proxy-server={proxy}')
+
+    browser = playwright.chromium.launch(
+        headless=True,
+        args=browser_args
     )
     
-    # Establecer timeouts optimizados
-    driver.set_page_load_timeout(20)
-    driver.implicitly_wait(5)
+    # Configuración del contexto según el dispositivo
+    context_settings = {}
     
-    return driver, width, height
+    if device_profile == "mobile":
+        context_settings = playwright.devices['iPhone 12']
+    elif device_profile == "tablet":
+        context_settings = playwright.devices['iPad Pro 11']
+    elif device_profile == "custom" and custom_width and custom_height:
+        context_settings = {
+            "viewport": {"width": custom_width, "height": custom_height},
+            "screen": {"width": custom_width, "height": custom_height}
+        }
+    else:  # desktop
+        context_settings = {
+            "viewport": {"width": 1920, "height": 1080},
+            "screen": {"width": 1920, "height": 1080}
+        }
+    
+    # Crear contexto con configuraciones
+    context = browser.new_context(**context_settings)
+    
+    # Configurar timeouts
+    context.set_default_timeout(20000)
+    context.set_default_navigation_timeout(20000)
+    
+    return browser, context
 
 def get_loading_message():
     """Retorna un mensaje aleatorio divertido durante la carga"""
@@ -146,114 +81,158 @@ def get_loading_message():
 
 def capture_screenshot(url, device_profile="desktop", custom_width=None, custom_height=None):
     try:
-        driver = None
-        temp_dir = tempfile.mkdtemp()
-        safe_filename = sanitize_filename(url)
-        screenshot_path = os.path.join(temp_dir, f"{safe_filename}_{device_profile}.png")
-        
-        try:
-            driver, width, height = setup_driver(device_profile, custom_width, custom_height)
+        with sync_playwright() as playwright:
+            browser = None
+            temp_dir = tempfile.mkdtemp()
+            safe_filename = sanitize_filename(url)
+            screenshot_path = os.path.join(temp_dir, f"{safe_filename}_{device_profile}.png")
             
-            # Load page with timeout and wait for content
-            driver.set_page_load_timeout(20)
-            driver.get(url)
-            
-            # Esperar a que la página cargue completamente
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
-            
-            # Esperar a que desaparezca el overlay de carga si existe
             try:
-                WebDriverWait(driver, 5).until_not(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, ".loading, .loader, .spinner"))
-                )
-            except:
-                pass
-            
-            # Obtener altura total de la página
-            total_height = driver.execute_script("return Math.max(document.body.scrollHeight, document.body.offsetHeight, document.documentElement.clientHeight, document.documentElement.scrollHeight, document.documentElement.offsetHeight);")
-            
-            # Ajustar el tamaño de la ventana para capturar toda la página
-            driver.set_window_size(width, total_height)
-            
-            # Scroll suave por la página para cargar contenido lazy
-            current_height = 0
-            while current_height < total_height:
-                driver.execute_script(f"window.scrollTo(0, {current_height});")
-                current_height += height // 2
-                time.sleep(0.3)
-            
-            # Volver al inicio
-            driver.execute_script("window.scrollTo(0, 0);")
-            time.sleep(0.5)
-            
-            # Intentar cerrar pop-ups o cookies si existen
-            try:
-                selectors = [
-                    "//button[contains(., 'Accept')]",
-                    "//button[contains(., 'Aceptar')]",
-                    "//div[contains(@class, 'cookie')]//button",
-                    "//button[contains(@class, 'accept')]",
-                ]
+                browser, context = setup_browser(playwright, device_profile, custom_width, custom_height)
+                page = context.new_page()
                 
-                for selector in selectors:
-                    try:
-                        elements = driver.find_elements(By.XPATH, selector)
-                        for element in elements:
-                            if element.is_displayed():
-                                element.click()
-                                time.sleep(0.2)
-                    except:
-                        continue
-            except:
-                pass
-            
-            # Esperar a que se estabilice la página
-            time.sleep(0.5)
-            
-            # Ocultar elementos flotantes que puedan interferir
-            driver.execute_script("""
-                document.querySelectorAll('*').forEach(el => {
-                    const style = window.getComputedStyle(el);
-                    if (style.position === 'fixed' || style.position === 'sticky') {
-                        el.style.display = 'none';
-                    }
-                });
-            """)
-            
-            time.sleep(0.3)
-            
-            # Tomar screenshot de toda la página
-            driver.save_screenshot(screenshot_path)
-            
-            # Verificar que se guardó correctamente
-            if not os.path.exists(screenshot_path):
-                raise Exception("Screenshot was not saved")
+                # Navegar a la página
+                page.goto(url, wait_until="networkidle")
                 
-            # Verificar que la imagen es válida
-            img = Image.open(screenshot_path)
-            img.verify()
-            
-            # Verificar que la imagen no está en blanco
-            img = Image.open(screenshot_path)
-            extrema = img.convert("L").getextrema()
-            if extrema[0] == extrema[1]:  # Si min y max son iguales, la imagen está en blanco
-                raise Exception("Captured image is blank")
-            
-            return screenshot_path
-            
-        except Exception as e:
-            st.warning(f"Error capturing screenshot: {str(e)}")
-            return None
-            
-        finally:
-            if driver:
-                driver.quit()
+                # Esperar a que la página cargue completamente
+                page.wait_for_load_state("domcontentloaded")
+                page.wait_for_load_state("networkidle")
                 
+                # Intentar cerrar pop-ups o cookies si existen
+                try:
+                    selectors = [
+                        "text=Accept",
+                        "text=Aceptar",
+                        "[aria-label*='cookie' i] button",
+                        "[id*='cookie' i] button",
+                        "[class*='cookie' i] button",
+                        "button:has-text('Accept')",
+                        "button:has-text('Aceptar')"
+                    ]
+                    
+                    for selector in selectors:
+                        try:
+                            if page.locator(selector).count() > 0:
+                                page.locator(selector).first.click(timeout=2000)
+                                page.wait_for_timeout(200)
+                        except:
+                            continue
+                except:
+                    pass
+                
+                # Scroll suave por la página para cargar contenido lazy
+                page.evaluate("""
+                    window.scrollTo(0, 0);
+                    new Promise((resolve) => {
+                        let totalHeight = 0;
+                        const distance = 100;
+                        const timer = setInterval(() => {
+                            const scrollHeight = document.body.scrollHeight;
+                            window.scrollBy(0, distance);
+                            totalHeight += distance;
+                            
+                            if(totalHeight >= scrollHeight){
+                                clearInterval(timer);
+                                resolve();
+                            }
+                        }, 100);
+                    });
+                """)
+                
+                # Esperar un momento para que se cargue todo
+                page.wait_for_timeout(1000)
+                
+                # Ocultar elementos flotantes
+                page.evaluate("""
+                    document.querySelectorAll('*').forEach(el => {
+                        const style = window.getComputedStyle(el);
+                        if (style.position === 'fixed' || style.position === 'sticky') {
+                            el.style.display = 'none';
+                        }
+                    });
+                """)
+                
+                # Tomar screenshot de toda la página
+                page.screenshot(path=screenshot_path, full_page=True)
+                
+                # Verificar que se guardó correctamente
+                if not os.path.exists(screenshot_path):
+                    raise Exception("Screenshot was not saved")
+                    
+                # Verificar que la imagen es válida
+                img = Image.open(screenshot_path)
+                img.verify()
+                
+                # Verificar que la imagen no está en blanco
+                img = Image.open(screenshot_path)
+                extrema = img.convert("L").getextrema()
+                if extrema[0] == extrema[1]:  # Si min y max son iguales, la imagen está en blanco
+                    raise Exception("Captured image is blank")
+                
+                return screenshot_path
+                
+            except Exception as e:
+                st.warning(f"Error capturing screenshot: {str(e)}")
+                return None
+                
+            finally:
+                if browser:
+                    browser.close()
+                    
     except Exception as e:
         st.error(f"Critical error: {str(e)}")
         return None
+
+def extract_urls(url):
+    """Extrae las URLs principales de una página web"""
+    try:
+        with sync_playwright() as playwright:
+            browser = None
+            urls = set()
+            try:
+                browser, context = setup_browser(playwright)
+                page = context.new_page()
+                
+                # Navegar a la página
+                page.goto(url, wait_until="networkidle")
+                
+                # Esperar a que la página cargue
+                page.wait_for_load_state("domcontentloaded")
+                page.wait_for_load_state("networkidle")
+                
+                # Obtener el HTML después de que JavaScript haya modificado la página
+                html = page.content()
+                soup = BeautifulSoup(html, 'lxml')
+                
+                # Obtener el dominio base
+                base_domain = urlparse(url).netloc
+                
+                # Encontrar todos los enlaces
+                for link in soup.find_all('a', href=True):
+                    href = link.get('href')
+                    # Convertir URLs relativas a absolutas
+                    full_url = urljoin(url, href)
+                    # Filtrar URLs del mismo dominio y eliminar fragmentos
+                    parsed_url = urlparse(full_url)
+                    if parsed_url.netloc == base_domain and parsed_url.scheme in ['http', 'https']:
+                        # Eliminar fragmentos y parámetros de consulta
+                        clean_url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}"
+                        if clean_url != url:  # Excluir la URL original
+                            urls.add(clean_url)
+                
+                return sorted(list(urls))
+                
+            except Exception as e:
+                st.warning(f"Error extracting URLs: {str(e)}")
+                return []
+                
+            finally:
+                if browser:
+                    browser.close()
+                    
+    except Exception as e:
+        st.error(f"Critical error: {str(e)}")
+        return []
 
 def sanitize_filename(url):
     """Sanitiza una URL para usarla como nombre de archivo"""
@@ -263,54 +242,6 @@ def sanitize_filename(url):
     url = re.sub(r'[<>:"/\\|?*]', '_', url)
     # Limitar la longitud del nombre del archivo
     return url[:50]
-
-def extract_urls(url):
-    """Extrae las URLs principales de una página web"""
-    try:
-        driver = None
-        urls = set()
-        try:
-            driver, _, _ = setup_driver()
-            driver.get(url)
-            
-            # Esperar a que la página cargue
-            WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
-            
-            # Obtener el HTML después de que JavaScript haya modificado la página
-            html = driver.page_source
-            soup = BeautifulSoup(html, 'lxml')
-            
-            # Obtener el dominio base
-            base_domain = urlparse(url).netloc
-            
-            # Encontrar todos los enlaces
-            for link in soup.find_all('a', href=True):
-                href = link.get('href')
-                # Convertir URLs relativas a absolutas
-                full_url = urljoin(url, href)
-                # Filtrar URLs del mismo dominio y eliminar fragmentos
-                parsed_url = urlparse(full_url)
-                if parsed_url.netloc == base_domain and parsed_url.scheme in ['http', 'https']:
-                    # Eliminar fragmentos y parámetros de consulta
-                    clean_url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}"
-                    if clean_url != url:  # Excluir la URL original
-                        urls.add(clean_url)
-            
-            return sorted(list(urls))
-            
-        except Exception as e:
-            st.warning(f"Error extracting URLs: {str(e)}")
-            return []
-            
-        finally:
-            if driver:
-                driver.quit()
-                
-    except Exception as e:
-        st.error(f"Critical error: {str(e)}")
-        return []
 
 def main():
     st.title("📸 Smart Screenshot Capture")
