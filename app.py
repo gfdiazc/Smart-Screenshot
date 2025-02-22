@@ -29,7 +29,7 @@ def get_proxy():
     except:
         return None
 
-def setup_driver():
+def setup_driver(device_profile="desktop", custom_width=None, custom_height=None):
     options = Options()
     
     # Configuración básica
@@ -37,15 +37,32 @@ def setup_driver():
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
-    options.add_argument('--window-size=1920,1080')
-    options.add_argument('--start-maximized')
+    
+    # Device-specific configuration
+    if device_profile == "mobile":
+        width, height = 375, 812  # iPhone X
+        options.add_argument(f'--window-size={width},{height}')
+        options.add_argument('--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1')
+    elif device_profile == "tablet":
+        width, height = 768, 1024  # iPad
+        options.add_argument(f'--window-size={width},{height}')
+        options.add_argument('--user-agent=Mozilla/5.0 (iPad; CPU OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1')
+    elif device_profile == "custom" and custom_width and custom_height:
+        width, height = custom_width, custom_height
+        options.add_argument(f'--window-size={width},{height}')
+    else:  # desktop
+        width, height = 1920, 1080
+        options.add_argument(f'--window-size={width},{height}')
+        # Random desktop user agent
+        ua = UserAgent()
+        user_agent = ua.random
+        options.add_argument(f'user-agent={user_agent}')
     
     # Performance optimizations
     options.add_argument('--disable-extensions')
     options.add_argument('--disable-software-rasterizer')
     options.add_argument('--disable-dev-tools')
     options.add_argument('--dns-prefetch-disable')
-    options.add_argument('--disable-features=IsolateOrigins,site-per-process')
     
     # Set Chrome binary path for Streamlit Cloud
     options.binary_location = '/usr/bin/chromium'
@@ -54,11 +71,6 @@ def setup_driver():
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option('useAutomationExtension', False)
     options.add_argument('--disable-blink-features=AutomationControlled')
-    
-    # Random user agent
-    ua = UserAgent()
-    user_agent = ua.random
-    options.add_argument(f'user-agent={user_agent}')
     
     # Add proxy if available
     proxy = get_proxy()
@@ -112,12 +124,7 @@ def setup_driver():
     driver.set_page_load_timeout(20)
     driver.implicitly_wait(5)
     
-    # Simular comportamiento humano inicial (más rápido)
-    driver.execute_script("window.scrollTo(0, document.body.scrollHeight/2);")
-    time.sleep(0.5)
-    driver.execute_script("window.scrollTo(0, 0);")
-    
-    return driver, 1920, 1080
+    return driver, width, height
 
 def get_loading_message():
     """Retorna un mensaje aleatorio divertido durante la carga"""
@@ -137,7 +144,7 @@ def get_loading_message():
     ]
     return random.choice(messages)
 
-def capture_screenshot(url, device_profile="desktop"):
+def capture_screenshot(url, device_profile="desktop", custom_width=None, custom_height=None):
     try:
         driver = None
         temp_dir = tempfile.mkdtemp()
@@ -145,10 +152,7 @@ def capture_screenshot(url, device_profile="desktop"):
         screenshot_path = os.path.join(temp_dir, f"{safe_filename}_{device_profile}.png")
         
         try:
-            driver, width, height = setup_driver()
-            
-            # Simular comportamiento humano antes de cargar la página (reducido)
-            time.sleep(0.5)
+            driver, width, height = setup_driver(device_profile, custom_width, custom_height)
             
             # Load page with timeout and wait for content
             driver.set_page_load_timeout(20)
@@ -167,46 +171,25 @@ def capture_screenshot(url, device_profile="desktop"):
             except:
                 pass
             
-            # Simular movimiento aleatorio del mouse (simplificado)
-            driver.execute_script("""
-                (() => {
-                    const box = document.body.getBoundingClientRect();
-                    const point = {
-                        x: Math.random() * box.width,
-                        y: Math.random() * box.height
-                    };
-                    document.elementFromPoint(point.x, point.y)?.dispatchEvent(
-                        new MouseEvent('mousemove', {
-                            bubbles: true,
-                            cancelable: true,
-                            clientX: point.x,
-                            clientY: point.y
-                        })
-                    );
-                })();
-            """)
+            # Obtener altura total de la página
+            total_height = driver.execute_script("return Math.max(document.body.scrollHeight, document.body.offsetHeight, document.documentElement.clientHeight, document.documentElement.scrollHeight, document.documentElement.offsetHeight);")
             
-            # Esperar un tiempo mínimo
-            time.sleep(1)
+            # Ajustar el tamaño de la ventana para capturar toda la página
+            driver.set_window_size(width, total_height)
             
-            # Scroll optimizado para cargar contenido lazy
-            total_height = driver.execute_script("return Math.max( document.body.scrollHeight, document.body.offsetHeight, document.documentElement.clientHeight, document.documentElement.scrollHeight, document.documentElement.offsetHeight );")
-            viewport_height = driver.execute_script("return window.innerHeight")
-            slices = 3  # Reducido de 5 a 3
-            slice_height = total_height // slices
-            
-            # Scroll más rápido
-            for i in range(slices):
-                driver.execute_script(f"window.scrollTo(0, {i * slice_height});")
-                time.sleep(0.3)  # Reducido de 0.5-1.5 a 0.3
+            # Scroll suave por la página para cargar contenido lazy
+            current_height = 0
+            while current_height < total_height:
+                driver.execute_script(f"window.scrollTo(0, {current_height});")
+                current_height += height // 2
+                time.sleep(0.3)
             
             # Volver al inicio
             driver.execute_script("window.scrollTo(0, 0);")
             time.sleep(0.5)
             
-            # Intentar cerrar pop-ups o cookies si existen (optimizado)
+            # Intentar cerrar pop-ups o cookies si existen
             try:
-                # Lista reducida de selectores más comunes
                 selectors = [
                     "//button[contains(., 'Accept')]",
                     "//button[contains(., 'Aceptar')]",
@@ -226,7 +209,7 @@ def capture_screenshot(url, device_profile="desktop"):
             except:
                 pass
             
-            # Esperar menos tiempo para estabilización
+            # Esperar a que se estabilice la página
             time.sleep(0.5)
             
             # Ocultar elementos flotantes que puedan interferir
@@ -241,7 +224,7 @@ def capture_screenshot(url, device_profile="desktop"):
             
             time.sleep(0.3)
             
-            # Tomar screenshot
+            # Tomar screenshot de toda la página
             driver.save_screenshot(screenshot_path)
             
             # Verificar que se guardó correctamente
@@ -368,112 +351,125 @@ def main():
     if st.session_state.extracted_urls:
         st.markdown("### 🌐 Found URLs")
         
-        # URL selection
-        selected_urls = st.multiselect(
-            "Select URLs to capture:",
-            st.session_state.extracted_urls,
-            default=st.session_state.selected_urls,
-            help="Select the URLs you want to capture screenshots of."
-        )
-        st.session_state.selected_urls = selected_urls
-        
-        if selected_urls:
-            # Device selection with detailed help
-            st.markdown("### 📱 Device Settings")
-            devices = st.multiselect(
-                "Select devices:",
-                ["desktop", "mobile", "tablet", "custom"],
-                default=["desktop"],
-                help="""
-                - Desktop: 1920x1080px
-                - Mobile: 375x812px (iPhone X)
-                - Tablet: 768x1024px (iPad)
-                - Custom: Define your own dimensions
-                """
+        # URL selection with improved display
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            selected_urls = st.multiselect(
+                "Select URLs to capture:",
+                st.session_state.extracted_urls,
+                default=st.session_state.selected_urls,
+                help="Select the URLs you want to capture screenshots of.",
+                max_selections=None,  # Allow unlimited selections
+                format_func=lambda x: x  # Show full URL
             )
+            st.session_state.selected_urls = selected_urls
+        
+        # Show selected URLs count
+        with col2:
+            st.metric("Selected URLs", len(selected_urls))
+        
+        # Display selected URLs in a more readable format
+        if selected_urls:
+            with st.expander("Selected URLs", expanded=True):
+                for url in selected_urls:
+                    st.write(f"• {url}")
+        
+        # Device selection with detailed help
+        st.markdown("### 📱 Device Settings")
+        devices = st.multiselect(
+            "Select devices:",
+            ["desktop", "mobile", "tablet", "custom"],
+            default=["desktop"],
+            help="""
+            - Desktop: 1920x1080px
+            - Mobile: 375x812px (iPhone X)
+            - Tablet: 768x1024px (iPad)
+            - Custom: Define your own dimensions
+            """
+        )
+        
+        # Custom device configuration
+        custom_width = None
+        custom_height = None
+        if "custom" in devices:
+            st.markdown("#### Custom Device Settings")
+            col1, col2 = st.columns(2)
+            with col1:
+                custom_width = st.number_input(
+                    "Custom width (px):",
+                    min_value=400,
+                    value=1200,
+                    help="Minimum width is 400px"
+                )
+            with col2:
+                custom_height = st.number_input(
+                    "Custom height (px):",
+                    min_value=600,
+                    value=3000,
+                    help="Minimum height is 600px"
+                )
+        
+        # Advanced options in an expander
+        with st.expander("ℹ️ Tips & Information"):
+            st.markdown("""
+            ### Usage Tips
+            - URLs are automatically extracted from the main website
+            - Select the specific URLs you want to capture
+            - The tool will automatically handle cookies and pop-ups
+            - For best results, wait until all screenshots are processed
             
-            # Custom device configuration
-            custom_width = None
-            custom_height = None
-            if "custom" in devices:
-                st.markdown("#### Custom Device Settings")
-                col1, col2 = st.columns(2)
-                with col1:
-                    custom_width = st.number_input(
-                        "Custom width (px):",
-                        min_value=400,
-                        value=1200,
-                        help="Minimum width is 400px"
-                    )
-                with col2:
-                    custom_height = st.number_input(
-                        "Custom height (px):",
-                        min_value=600,
-                        value=3000,
-                        help="Minimum height is 600px"
-                    )
+            ### Supported Features
+            - URL extraction and filtering
+            - Multi-device capture
+            - Cookie consent handling
+            - Pop-up management
+            - Full page screenshots
+            - Batch processing
             
-            # Advanced options in an expander
-            with st.expander("ℹ️ Tips & Information"):
-                st.markdown("""
-                ### Usage Tips
-                - URLs are automatically extracted from the main website
-                - Select the specific URLs you want to capture
-                - The tool will automatically handle cookies and pop-ups
-                - For best results, wait until all screenshots are processed
-                
-                ### Supported Features
-                - URL extraction and filtering
-                - Multi-device capture
-                - Cookie consent handling
-                - Pop-up management
-                - Full page screenshots
-                - Batch processing
-                
-                ### Output
-                - Screenshots are saved in PNG format
-                - Download individual images or all as ZIP
-                - Images are named using the website's URL and device type
-                """)
+            ### Output
+            - Screenshots are saved in PNG format
+            - Download individual images or all as ZIP
+            - Images are named using the website's URL and device type
+            """)
+        
+        # Capture button
+        if st.button("📸 Capture Screenshots", help="Click to start capturing screenshots of selected URLs"):
+            status_container = st.empty()
+            progress_container = st.empty()
+            message_container = st.empty()
             
-            # Capture button
-            if st.button("📸 Capture Screenshots", help="Click to start capturing screenshots of selected URLs"):
-                status_container = st.empty()
-                progress_container = st.empty()
-                message_container = st.empty()
+            with st.spinner("Processing screenshots... This may take a few moments."):
+                # Crear nuevo directorio temporal solo si no existe
+                if not st.session_state.temp_dir:
+                    st.session_state.temp_dir = tempfile.mkdtemp()
+                    st.session_state.screenshot_paths = []
                 
-                with st.spinner("Processing screenshots... This may take a few moments."):
-                    # Crear nuevo directorio temporal solo si no existe
-                    if not st.session_state.temp_dir:
-                        st.session_state.temp_dir = tempfile.mkdtemp()
-                        st.session_state.screenshot_paths = []
-                    
-                    # Progress tracking
-                    total_captures = len(selected_urls) * len(devices)
-                    current_capture = 0
-                    
-                    for url in selected_urls:
-                        for device in devices:
-                            try:
-                                # Update progress and show fun message
-                                current_capture += 1
-                                progress = current_capture / total_captures
-                                status_container.text(f"Processing: {url} ({device})")
-                                progress_container.progress(progress)
-                                message_container.info(get_loading_message())
+                # Progress tracking
+                total_captures = len(selected_urls) * len(devices)
+                current_capture = 0
+                
+                for url in selected_urls:
+                    for device in devices:
+                        try:
+                            # Update progress and show fun message
+                            current_capture += 1
+                            progress = current_capture / total_captures
+                            status_container.text(f"Processing: {url} ({device})")
+                            progress_container.progress(progress)
+                            message_container.info(get_loading_message())
+                            
+                            screenshot_path = capture_screenshot(url, device, custom_width, custom_height)
+                            
+                            if screenshot_path and screenshot_path not in st.session_state.screenshot_paths:
+                                st.session_state.screenshot_paths.append(screenshot_path)
                                 
-                                screenshot_path = capture_screenshot(url, device)
-                                
-                                if screenshot_path and screenshot_path not in st.session_state.screenshot_paths:
-                                    st.session_state.screenshot_paths.append(screenshot_path)
-                                    
-                            except Exception as e:
-                                st.error(f"Error capturing {url} ({device}): {str(e)}")
-                    
-                    # Clear progress indicators
-                    status_container.empty()
-                    progress_container.empty()
-                    message_container.empty()
+                        except Exception as e:
+                            st.error(f"Error capturing {url} ({device}): {str(e)}")
+                
+                # Clear progress indicators
+                status_container.empty()
+                progress_container.empty()
+                message_container.empty()
     
     # Show results if there are screenshots
     if st.session_state.screenshot_paths:
