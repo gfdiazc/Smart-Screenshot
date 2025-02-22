@@ -40,6 +40,13 @@ def setup_driver():
     options.add_argument('--window-size=1920,1080')
     options.add_argument('--start-maximized')
     
+    # Performance optimizations
+    options.add_argument('--disable-extensions')
+    options.add_argument('--disable-software-rasterizer')
+    options.add_argument('--disable-dev-tools')
+    options.add_argument('--dns-prefetch-disable')
+    options.add_argument('--disable-features=IsolateOrigins,site-per-process')
+    
     # Set Chrome binary path for Streamlit Cloud
     options.binary_location = '/usr/bin/chromium'
     
@@ -69,9 +76,9 @@ def setup_driver():
                 get: () => undefined
             });
             
-            // Overwrite the 'plugins' property to use a custom getter
+            // Overwrite the 'plugins' property
             Object.defineProperty(navigator, 'plugins', {
-                get: () => [1, 2, 3, 4, 5].map(() => ({
+                get: () => [1, 2, 3].map(() => ({
                     name: ['Chrome PDF Plugin', 'Chrome PDF Viewer', 'Native Client'][Math.floor(Math.random() * 3)]
                 }))
             });
@@ -88,40 +95,6 @@ def setup_driver():
                 csi: function() {},
                 app: {}
             };
-            
-            // Overwrite permissions
-            const originalQuery = window.navigator.permissions.query;
-            window.navigator.permissions.query = (parameters) => (
-                parameters.name === 'notifications' ?
-                Promise.resolve({ state: Notification.permission }) :
-                originalQuery(parameters)
-            );
-            
-            // Modificar el comportamiento de WebGL
-            HTMLCanvasElement.prototype.getContext = new Proxy(HTMLCanvasElement.prototype.getContext, {
-                apply(target, thisArg, args) {
-                    if (args[0] === 'webgl' || args[0] === 'webgl2') {
-                        const context = target.apply(thisArg, args);
-                        context.getParameter = new Proxy(context.getParameter, {
-                            apply(target, thisArg, args) {
-                                const param = args[0];
-                                const result = target.apply(thisArg, args);
-                                
-                                // Modificar valores específicos de WebGL
-                                if (param === 37445) { // UNMASKED_VENDOR_WEBGL
-                                    return 'Intel Inc.';
-                                }
-                                if (param === 37446) { // UNMASKED_RENDERER_WEBGL
-                                    return 'Intel Iris OpenGL Engine';
-                                }
-                                
-                                return result;
-                            }
-                        });
-                    }
-                    return target.apply(thisArg, args);
-                }
-            });
         '''
     })
     
@@ -135,13 +108,13 @@ def setup_driver():
         fix_hairline=True,
     )
     
-    # Establecer timeouts
-    driver.set_page_load_timeout(30)
-    driver.implicitly_wait(10)
+    # Establecer timeouts optimizados
+    driver.set_page_load_timeout(20)
+    driver.implicitly_wait(5)
     
-    # Simular comportamiento humano inicial
+    # Simular comportamiento humano inicial (más rápido)
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight/2);")
-    time.sleep(random.uniform(1, 2))
+    time.sleep(0.5)
     driver.execute_script("window.scrollTo(0, 0);")
     
     return driver, 1920, 1080
@@ -174,110 +147,71 @@ def capture_screenshot(url, device_profile="desktop"):
         try:
             driver, width, height = setup_driver()
             
-            # Simular comportamiento humano antes de cargar la página
-            time.sleep(random.uniform(1, 2))
+            # Simular comportamiento humano antes de cargar la página (reducido)
+            time.sleep(0.5)
             
             # Load page with timeout and wait for content
-            driver.set_page_load_timeout(30)
+            driver.set_page_load_timeout(20)
             driver.get(url)
             
             # Esperar a que la página cargue completamente
-            WebDriverWait(driver, 20).until(
+            WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.TAG_NAME, "body"))
             )
             
             # Esperar a que desaparezca el overlay de carga si existe
             try:
-                WebDriverWait(driver, 10).until_not(
+                WebDriverWait(driver, 5).until_not(
                     EC.presence_of_element_located((By.CSS_SELECTOR, ".loading, .loader, .spinner"))
                 )
             except:
                 pass
             
-            # Simular movimiento aleatorio del mouse
+            # Simular movimiento aleatorio del mouse (simplificado)
             driver.execute_script("""
                 (() => {
                     const box = document.body.getBoundingClientRect();
-                    const points = Array.from({length: 5}, () => ({
+                    const point = {
                         x: Math.random() * box.width,
                         y: Math.random() * box.height
-                    }));
-                    
-                    points.forEach(point => {
-                        const event = new MouseEvent('mousemove', {
-                            view: window,
+                    };
+                    document.elementFromPoint(point.x, point.y)?.dispatchEvent(
+                        new MouseEvent('mousemove', {
                             bubbles: true,
                             cancelable: true,
                             clientX: point.x,
                             clientY: point.y
-                        });
-                        document.elementFromPoint(point.x, point.y)?.dispatchEvent(event);
-                    });
+                        })
+                    );
                 })();
             """)
             
-            # Esperar un tiempo aleatorio
-            time.sleep(random.uniform(2, 3))
+            # Esperar un tiempo mínimo
+            time.sleep(1)
             
-            # Scroll para cargar contenido lazy
+            # Scroll optimizado para cargar contenido lazy
             total_height = driver.execute_script("return Math.max( document.body.scrollHeight, document.body.offsetHeight, document.documentElement.clientHeight, document.documentElement.scrollHeight, document.documentElement.offsetHeight );")
             viewport_height = driver.execute_script("return window.innerHeight")
-            slices = 5
+            slices = 3  # Reducido de 5 a 3
             slice_height = total_height // slices
             
-            # Scroll suave por la página con pausas aleatorias
+            # Scroll más rápido
             for i in range(slices):
-                # Scroll con velocidad variable
-                driver.execute_script(f"""
-                    window.scrollTo({{
-                        top: {i * slice_height},
-                        behavior: 'smooth'
-                    }});
-                """)
-                # Pausa aleatoria simulando lectura
-                time.sleep(random.uniform(0.5, 1.5))
-                
-                # 30% de probabilidad de hacer un pequeño scroll arriba y abajo
-                if random.random() < 0.3:
-                    driver.execute_script(f"""
-                        window.scrollTo({{
-                            top: {i * slice_height - 100},
-                            behavior: 'smooth'
-                        }});
-                    """)
-                    time.sleep(0.5)
-                    driver.execute_script(f"""
-                        window.scrollTo({{
-                            top: {i * slice_height},
-                            behavior: 'smooth'
-                        }});
-                    """)
+                driver.execute_script(f"window.scrollTo(0, {i * slice_height});")
+                time.sleep(0.3)  # Reducido de 0.5-1.5 a 0.3
             
-            # Volver al inicio suavemente
-            driver.execute_script("""
-                window.scrollTo({
-                    top: 0,
-                    behavior: 'smooth'
-                });
-            """)
-            time.sleep(2)
+            # Volver al inicio
+            driver.execute_script("window.scrollTo(0, 0);")
+            time.sleep(0.5)
             
-            # Intentar cerrar pop-ups o cookies si existen
+            # Intentar cerrar pop-ups o cookies si existen (optimizado)
             try:
-                # Lista de selectores comunes para botones de cookies y pop-ups
+                # Lista reducida de selectores más comunes
                 selectors = [
                     "//button[contains(., 'Accept')]",
                     "//button[contains(., 'Aceptar')]",
-                    "//button[contains(., 'Accept All')]",
-                    "//button[contains(., 'Aceptar todo')]",
-                    "//button[contains(., 'Close')]",
-                    "//button[contains(., 'Cerrar')]",
                     "//div[contains(@class, 'cookie')]//button",
-                    "//div[contains(@class, 'popup')]//button",
-                    "//div[contains(@class, 'modal')]//button",
-                    "//button[contains(@class, 'close')]",
                     "//button[contains(@class, 'accept')]",
-                    "//button[contains(@class, 'cookie')]",
                 ]
                 
                 for selector in selectors:
@@ -285,18 +219,15 @@ def capture_screenshot(url, device_profile="desktop"):
                         elements = driver.find_elements(By.XPATH, selector)
                         for element in elements:
                             if element.is_displayed():
-                                # Simular hover antes de hacer clic
-                                driver.execute_script("arguments[0].dispatchEvent(new MouseEvent('mouseover', {'bubbles': true}));", element)
-                                time.sleep(0.3)
                                 element.click()
-                                time.sleep(0.5)
+                                time.sleep(0.2)
                     except:
                         continue
             except:
                 pass
             
-            # Esperar a que se estabilice la página
-            time.sleep(2)
+            # Esperar menos tiempo para estabilización
+            time.sleep(0.5)
             
             # Ocultar elementos flotantes que puedan interferir
             driver.execute_script("""
@@ -308,7 +239,7 @@ def capture_screenshot(url, device_profile="desktop"):
                 });
             """)
             
-            time.sleep(1)
+            time.sleep(0.3)
             
             # Tomar screenshot
             driver.save_screenshot(screenshot_path)
