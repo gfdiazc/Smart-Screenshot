@@ -28,16 +28,39 @@ def get_proxy():
         return None
     return None
 
+def find_chromium_executable():
+    """Busca el ejecutable de Chromium en diferentes ubicaciones comunes"""
+    possible_paths = [
+        "/usr/bin/chromium-browser",
+        "/usr/bin/chromium",
+        "/usr/bin/chrome",
+        "/snap/bin/chromium",
+        "/usr/lib/chromium/chromium",
+        "/usr/lib/chromium-browser/chromium-browser"
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    
+    return None
+
 def setup_browser(playwright, device_profile="desktop", custom_width=None, custom_height=None):
     """Configura y retorna una instancia del navegador con manejo de errores mejorado"""
     # Configuración del navegador
     browser_args = []
     proxy = get_proxy()
     
+    # Buscar el ejecutable de Chromium
+    chromium_path = find_chromium_executable()
+    if not chromium_path:
+        st.error("No se encontró el ejecutable de Chromium en ninguna ubicación conocida")
+        raise Exception("Chromium executable not found")
+    
     # Configuración específica para el navegador
     launch_options = {
         "headless": True,
-        "executable_path": "/usr/bin/chromium-browser",  # Usar el Chromium del sistema
+        "executable_path": chromium_path,
         "args": [
             "--no-sandbox",
             "--disable-setuid-sandbox",
@@ -57,8 +80,14 @@ def setup_browser(playwright, device_profile="desktop", custom_width=None, custo
             browser = playwright.chromium.launch(**launch_options)
     except Exception as e:
         st.error(f"Error launching browser: {str(e)}")
-        # Si falla con proxy, intentar sin proxy
-        browser = playwright.chromium.launch(**launch_options)
+        # Si falla con proxy, intentar sin proxy y sin executable_path
+        try:
+            # Intentar sin especificar executable_path
+            del launch_options["executable_path"]
+            browser = playwright.chromium.launch(**launch_options)
+        except Exception as e:
+            st.error(f"Error launching browser without executable path: {str(e)}")
+            raise e
     
     # Configuración del contexto según el dispositivo
     context_settings = {}
