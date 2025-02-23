@@ -139,8 +139,8 @@ def capture_screenshot(url, device_profile="desktop", custom_width=None, custom_
                                     page.wait_for_timeout(200)
                             except:
                                 continue
-    except:
-        pass
+                    except:
+                        pass
     
                     # Scroll suave por la página para cargar contenido lazy
                     page.evaluate("""
@@ -186,13 +186,12 @@ def capture_screenshot(url, device_profile="desktop", custom_width=None, custom_
                     img.verify()
                     
                     # Verificar que la imagen no está en blanco
-    img = Image.open(screenshot_path)
+                    img = Image.open(screenshot_path)
                     extrema = img.convert("L").getextrema()
                     if extrema[0] == extrema[1]:  # Si min y max son iguales, la imagen está en blanco
                         raise Exception("Captured image is blank")
-    
-    return screenshot_path
                     
+                    return screenshot_path
                 except Exception as e:
                     st.warning(f"Error en intento {retry_count + 1} de {max_retries}: {str(e)}")
                     retry_count += 1
@@ -640,11 +639,11 @@ def main():
                                 )
                                 col1, col2 = st.columns([3, 1])
                                 with col2:
-                    with open(path, "rb") as f:
-                        st.download_button(
+                                    with open(path, "rb") as f:
+                                        st.download_button(
                                             label=f"⬇️ Download",
-                            data=f,
-                            file_name=os.path.basename(path),
+                                            data=f,
+                                            file_name=os.path.basename(path),
                                             help=f"Download screenshot",
                                             key=f"dl_{path}",
                                             use_container_width=True
@@ -661,20 +660,20 @@ def main():
             with zipfile.ZipFile(zip_path, "w") as zipf:
                 for file in st.session_state.screenshot_paths:
                     if os.path.exists(file):
-                    zipf.write(file, os.path.basename(file))
+                        zipf.write(file, os.path.basename(file))
             
             if os.path.exists(zip_path):
-            with open(zip_path, "rb") as f:
+                with open(zip_path, "rb") as f:
                     col1, col2, col3 = st.columns([1, 2, 1])
                     with col2:
-                st.download_button(
+                        st.download_button(
                             label="📥 Download All Screenshots as ZIP",
-                    data=f,
-                    file_name="screenshots.zip",
+                            data=f,
+                            file_name="screenshots.zip",
                             help="Download all screenshots in a single ZIP file",
                             key="dl_all",
                             use_container_width=True
-                )
+                        )
 
 if __name__ == "__main__":
     main()
