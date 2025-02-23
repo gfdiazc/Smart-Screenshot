@@ -34,41 +34,58 @@ def setup_browser(playwright, device_profile="desktop", custom_width=None, custo
     browser_args = []
     proxy = get_proxy()
     
+    # Configuración específica para el navegador
+    launch_options = {
+        "headless": True,
+        "executable_path": "/usr/bin/chromium-browser",  # Usar el Chromium del sistema
+        "args": [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-accelerated-2d-canvas",
+            "--disable-gpu",
+            "--window-size=1920,1080",
+        ]
+    }
+    
     # Intentar primero con proxy si está disponible
     try:
         if proxy:
-            browser_args.append(f'--proxy-server={proxy}')
-            browser = playwright.chromium.launch(
-                headless=True,
-                args=browser_args
-            )
+            launch_options["args"].append(f'--proxy-server={proxy}')
+            browser = playwright.chromium.launch(**launch_options)
         else:
-            # Si no hay proxy disponible, intentar sin proxy
-            browser = playwright.chromium.launch(
-                headless=True
-            )
+            browser = playwright.chromium.launch(**launch_options)
     except Exception as e:
+        st.error(f"Error launching browser: {str(e)}")
         # Si falla con proxy, intentar sin proxy
-        browser = playwright.chromium.launch(
-            headless=True
-        )
+        browser = playwright.chromium.launch(**launch_options)
     
     # Configuración del contexto según el dispositivo
     context_settings = {}
     
     if device_profile == "mobile":
-        context_settings = playwright.devices['iPhone 12']
+        context_settings = {
+            "viewport": {"width": 375, "height": 812},
+            "device_scale_factor": 2,
+            "is_mobile": True,
+            "has_touch": True
+        }
     elif device_profile == "tablet":
-        context_settings = playwright.devices['iPad Pro 11']
+        context_settings = {
+            "viewport": {"width": 768, "height": 1024},
+            "device_scale_factor": 2,
+            "is_mobile": True,
+            "has_touch": True
+        }
     elif device_profile == "custom" and custom_width and custom_height:
         context_settings = {
             "viewport": {"width": custom_width, "height": custom_height},
-            "screen": {"width": custom_width, "height": custom_height}
+            "device_scale_factor": 1
         }
     else:  # desktop
         context_settings = {
             "viewport": {"width": 1920, "height": 1080},
-            "screen": {"width": 1920, "height": 1080}
+            "device_scale_factor": 1
         }
     
     # Crear contexto con configuraciones y timeouts más largos
