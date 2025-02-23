@@ -7,10 +7,6 @@ maxUploadSize = 200
 enableXsrfProtection = false
 enableCORS = false
 
-[runner]
-magicEnabled = true
-installTracer = true
-
 [client]
 showErrorDetails = true
 

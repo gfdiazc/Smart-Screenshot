@@ -414,7 +414,7 @@ def main():
     st.markdown("""
     ### ✍️ Or Add URLs Manually (Optional)
     If some URLs were not automatically extracted or you want to add specific pages, 
-    you can manually add them here. Add all the URLs you want and then click "Confirm URLs" to add them to the selection.
+    you can manually add them here.
     """)
     
     with st.expander("Add URLs manually", expanded=not bool(st.session_state.extracted_urls)):
@@ -423,10 +423,6 @@ def main():
         - https://www.example.com/products
         - https://www.example.com/about-us
         """)
-        
-        # Inicializar el estado para URLs temporales si no existe
-        if 'temp_urls' not in st.session_state:
-            st.session_state.temp_urls = set()
         
         # Campo de texto para ingresar URLs manualmente
         manual_url = st.text_input(
@@ -437,47 +433,43 @@ def main():
         
         col1, col2 = st.columns([3, 1])
         with col1:
-            if st.button("Add to List", help="Add this URL to the temporary list"):
+            if st.button("Add URL", help="Add this URL to the list"):
                 if manual_url:
                     # Asegurar que la URL comience con http:// o https://
                     if not manual_url.startswith(('http://', 'https://')):
                         manual_url = 'https://' + manual_url
                     
-                    # Añadir la URL a la lista temporal
-                    st.session_state.temp_urls.add(manual_url)
-                    st.success(f"Added to list: {manual_url}")
+                    # Añadir la URL directamente a las URLs manuales y seleccionadas
+                    st.session_state.manual_urls.add(manual_url)
+                    st.session_state.selected_urls_set.add(manual_url)
+                    st.session_state.selected_urls = list(st.session_state.selected_urls_set)
+                    st.success(f"Added: {manual_url}")
+                    st.rerun()
                 else:
                     st.warning("Please enter a valid URL")
         
         with col2:
-            if st.button("Clear List", help="Remove all URLs from the temporary list"):
-                st.session_state.temp_urls.clear()
+            if st.button("Clear All", help="Remove all manually added URLs"):
+                st.session_state.manual_urls.clear()
+                # Actualizar las URLs seleccionadas
+                st.session_state.selected_urls_set = set(url for url in st.session_state.selected_urls_set 
+                                                       if url not in st.session_state.manual_urls)
+                st.session_state.selected_urls = list(st.session_state.selected_urls_set)
+                st.rerun()
         
-        # Mostrar las URLs temporales
-        if st.session_state.temp_urls:
-            st.markdown("#### URLs to be added:")
-            for url in sorted(st.session_state.temp_urls):
+        # Mostrar las URLs añadidas manualmente
+        if st.session_state.manual_urls:
+            st.markdown("#### Manually Added URLs:")
+            for url in sorted(st.session_state.manual_urls):
                 col1, col2 = st.columns([4, 1])
                 with col1:
                     st.write(f"• {url}")
                 with col2:
-                    if st.button("🗑️", key=f"delete_temp_{url}", help=f"Remove {url}"):
-                        st.session_state.temp_urls.remove(url)
-            
-            # Botón para confirmar todas las URLs
-            if st.button("✅ Confirm URLs", help="Add all URLs to the selection"):
-                # Añadir todas las URLs temporales a las URLs manuales y seleccionadas
-                st.session_state.manual_urls.update(st.session_state.temp_urls)
-                st.session_state.selected_urls_set.update(st.session_state.temp_urls)
-                st.session_state.selected_urls = list(st.session_state.selected_urls_set)
-                if 'url_selector' not in st.session_state:
-                    st.session_state.url_selector = []
-                st.session_state.url_selector.extend(st.session_state.temp_urls)
-                
-                # Limpiar las URLs temporales
-                st.session_state.temp_urls.clear()
-                st.success("URLs added successfully!")
-                st.rerun()
+                    if st.button("🗑️", key=f"delete_{url}", help=f"Remove {url}"):
+                        st.session_state.manual_urls.remove(url)
+                        st.session_state.selected_urls_set.discard(url)
+                        st.session_state.selected_urls = list(st.session_state.selected_urls_set)
+                        st.rerun()
     
     # Display selected URLs in a more readable format
     if hasattr(st.session_state, 'selected_urls') and st.session_state.selected_urls:
@@ -498,7 +490,7 @@ def main():
     
     # Device selection with detailed help
     st.markdown("""
-    ### 📱 Step 2: Configure Device Settings
+    ### 📱 Step 3: Configure Device Settings
     Choose which device types you want to capture screenshots for. Each URL will be captured in all selected device sizes.
     """)
     
