@@ -1,3 +1,4 @@
+chromium
 playwright
 xvfb
 libnss3
@@ -5,4 +6,14 @@ libxss1
 libasound2
 libatk-bridge2.0-0
 libgtk-3-0
-libgbm1 
+libgbm1
+fonts-liberation
+libasound2
+libnspr4
+libnss3
+libxss1
+xdg-utils
+libatk1.0-0
+libatk-bridge2.0-0
+libxkbcommon0
+libatspi2.0-0 
