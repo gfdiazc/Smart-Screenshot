@@ -673,7 +673,7 @@ def main():
                             try:
                                 st.image(
                                     path,
-                                    use_column_width=True
+                                    use_container_width=True
                                 )
                                 col1, col2 = st.columns([3, 1])
                                 with col2:
