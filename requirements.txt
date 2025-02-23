@@ -1,5 +1,5 @@
 streamlit==1.32.0
-playwright[chromium]==1.42.0
+playwright==1.42.0
 pillow==10.2.0
 pandas==2.2.0
 requests==2.31.0
@@ -7,14 +7,3 @@ beautifulsoup4==4.12.3
 lxml==5.1.0
 pyee==11.0.1
 greenlet==3.0.3
-selenium==4.19.0
-selenium-wire==5.1.5
-webdriver-manager==4.0.1
-chromedriver-autoinstaller==1.0.0
-chromium-chromedriver==133.0.0
-setuptools==69.1.1
-undetected-chromedriver==3.5.5
-playwright-stealth==1.0.0
-playwright-extra==0.7.1
-playwright-extra-plugin-stealth==2.14.0
-playwright==1.42.0

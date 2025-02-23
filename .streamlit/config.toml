@@ -1,12 +1,18 @@
 [browser]
 serverAddress = "0.0.0.0"
-serverPort = 8501
 gatherUsageStats = false
 
 [server]
 maxUploadSize = 200
 enableXsrfProtection = false
 enableCORS = false
+
+[runner]
+magicEnabled = true
+installTracer = true
+
+[client]
+showErrorDetails = true
 
 [theme]
 primaryColor = "#FF4B4B"
