@@ -515,6 +515,7 @@ def main():
         width: 100% !important;
         margin: 0.5rem auto !important;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+        max-width: {max_width}px !important;
     }}
     
     /* Botón de descarga ZIP */
@@ -527,8 +528,8 @@ def main():
         padding: 0.75rem 1.5rem !important;
         margin: 1rem auto !important;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
-        max-width: 400px !important;
-        display: block !important;
+        width: 100% !important;
+        max-width: {max_width}px !important;
     }}
     
     /* Efectos hover */
@@ -571,6 +572,7 @@ def main():
         width: 100% !important;
         max-width: {max_width}px !important;
         margin: 0 auto !important;
+        padding: 0 !important;
     }}
     
     /* Centrar el área de texto */
@@ -582,6 +584,13 @@ def main():
     
     /* Centrar los selectores múltiples */
     .stMultiSelect {{
+        max-width: {max_width}px !important;
+        margin: 0 auto !important;
+    }}
+
+    /* Ajustar el contenedor de los botones de descarga */
+    .stDownloadButton {{
+        width: 100% !important;
         max-width: {max_width}px !important;
         margin: 0 auto !important;
     }}
