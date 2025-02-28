@@ -159,14 +159,24 @@ def capture_screenshot(url, device_profile="desktop", custom_width=None, custom_
                     browser, context = setup_browser(playwright, device_profile, custom_width, custom_height)
                     page = context.new_page()
                     
-                    # Navegar a la página con timeout extendido
-                    page.goto(url, wait_until="networkidle", timeout=30000)
+                    # Navegar a la página con timeout extendido y opciones optimizadas
+                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
                     
-                    # Esperar a que la página cargue completamente
-                    page.wait_for_load_state("domcontentloaded", timeout=30000)
-                    page.wait_for_load_state("networkidle", timeout=30000)
+                    # Esperar a que la página cargue lo suficiente para una buena captura
+                    # Primero esperar a que el DOM esté listo
+                    page.wait_for_load_state("domcontentloaded", timeout=20000)
                     
-                    # Intentar cerrar pop-ups o cookies si existen
+                    # Luego esperar un tiempo corto para que los elementos visuales se carguen
+                    page.wait_for_timeout(1000)
+                    
+                    # Finalmente esperar a que la red esté inactiva (hasta cierto punto)
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=5000)
+                    except:
+                        # Si hay actividad de red continua, seguimos adelante después de timeout
+                        pass
+                    
+                    # Intentar cerrar pop-ups o cookies si existen (con timeouts más cortos)
                     try:
                         selectors = [
                             "text=Accept",
@@ -181,19 +191,19 @@ def capture_screenshot(url, device_profile="desktop", custom_width=None, custom_
                         for selector in selectors:
                             try:
                                 if page.locator(selector).count() > 0:
-                                    page.locator(selector).first.click(timeout=2000)
+                                    page.locator(selector).first.click(timeout=1000)
                                     page.wait_for_timeout(200)
                             except:
                                 continue
                     except:
                         pass
     
-                    # Scroll suave por la página para cargar contenido lazy
+                    # Scroll suave por la página para cargar contenido lazy (más rápido)
                     page.evaluate("""
                         window.scrollTo(0, 0);
                         new Promise((resolve) => {
                             let totalHeight = 0;
-                            const distance = 100;
+                            const distance = 200;  // Mayor distancia para scroll más rápido
                             const timer = setInterval(() => {
                                 const scrollHeight = document.body.scrollHeight;
                                 window.scrollBy(0, distance);
@@ -203,12 +213,12 @@ def capture_screenshot(url, device_profile="desktop", custom_width=None, custom_
                                     clearInterval(timer);
                                     resolve();
                                 }
-                            }, 100);
+                            }, 50);  // Intervalo más corto para scroll más rápido
                         });
                     """)
                     
-                    # Esperar un momento para que se cargue todo
-                    page.wait_for_timeout(2000)
+                    # Esperar solo lo necesario para que se cargue contenido lazy
+                    page.wait_for_timeout(1000)
                     
                     # Ocultar elementos flotantes
                     page.evaluate("""
@@ -223,19 +233,14 @@ def capture_screenshot(url, device_profile="desktop", custom_width=None, custom_
                     # Tomar screenshot de toda la página
                     page.screenshot(path=screenshot_path, full_page=True)
                     
-                    # Verificar que se guardó correctamente
+                    # Verificaciones básicas de la imagen
                     if not os.path.exists(screenshot_path):
                         raise Exception("Screenshot was not saved")
                         
-                    # Verificar que la imagen es válida
-                    img = Image.open(screenshot_path)
-                    img.verify()
-                    
-                    # Verificar que la imagen no está en blanco
-                    img = Image.open(screenshot_path)
-                    extrema = img.convert("L").getextrema()
-                    if extrema[0] == extrema[1]:  # Si min y max son iguales, la imagen está en blanco
-                        raise Exception("Captured image is blank")
+                    # Verificar tamaño mínimo de archivo para asegurar que no está en blanco
+                    file_size = os.path.getsize(screenshot_path)
+                    if file_size < 1000:  # Si es menor a 1KB, probablemente está en blanco
+                        raise Exception("Captured image is too small, might be blank")
                     
                     return screenshot_path
                 except Exception as e:
@@ -370,186 +375,131 @@ def sanitize_filename(url):
     return url[:50]
 
 def main():
+    # Configuración de la página
+    st.set_page_config(
+        page_title="Smart Screenshot - Capture Website Screenshots Easily",
+        page_icon="📸",
+        layout="centered",
+        initial_sidebar_state="collapsed",
+    )
+    
     # Parámetro para controlar el ancho máximo (se puede cambiar según necesidades)
     max_width = 800
+    
+    # Definición de colores para usar en toda la aplicación
+    primary_color = "#4CAF50"
+    primary_hover_color = "#45a049"
     
     # Ajustar ancho de la aplicación para landing page
     st.markdown(f"""
     <style>
-    /* Contenedor principal */
-    .reportview-container .main .block-container {{
+    :root {{
+        --primary-color: {primary_color};
+        --primary-hover-color: {primary_hover_color};
+    }}
+    
+    /* Estilos base para toda la aplicación */
+    .stApp {{
+        max-width: 100%;
+    }}
+    
+    /* Contenedor principal para centrado */
+    .main .block-container {{
         max-width: {max_width}px;
-        padding-top: 0.5rem;
-        padding-bottom: 0.5rem;
+        padding: 1rem;
         margin: 0 auto;
     }}
     
-    /* Aplicación completa */
-    .stApp {{
-        max-width: 100%;
-        display: flex;
-        justify-content: center;
-    }}
-    
-    /* Contenedor principal de Streamlit */
-    .main > div:first-child {{
-        max-width: {max_width}px !important;
-        margin: 0 auto !important;
-        padding: 0 1rem !important;
-    }}
-    
-    /* Centrar todos los elementos */
-    .element-container, 
-    .stMarkdown,
-    .stButton,
-    .stTextArea,
-    [data-testid="stVerticalBlock"],
-    [data-testid="stHorizontalBlock"],
-    .stMetric {{
-        max-width: {max_width}px !important;
-        margin-left: auto !important;
-        margin-right: auto !important;
-    }}
-    
-    /* Expanders y sus contenedores */
-    .streamlit-expanderHeader,
-    .stExpander,
-    [data-testid="stExpander"] {{
-        max-width: {max_width}px !important;
-        margin: 0 auto !important;
-        width: 100% !important;
-    }}
-    
-    /* Contenedor de imágenes */
-    .stImage {{
-        max-width: {max_width}px !important;
-        margin: 0 auto !important;
-        width: 100% !important;
-    }}
-    
-    /* Imágenes dentro de los resultados */
-    .stImage img {{
-        max-width: {max_width}px !important;
-        width: 100% !important;
-        margin: 0 auto !important;
-        display: block !important;
-    }}
-    
-    /* Pestañas y sus contenedores */
-    .stTabs [data-baseweb="tab-list"],
-    .stTabs [data-baseweb="tab-panel"] {{
-        max-width: {max_width}px !important;
-        margin: 0 auto !important;
-        width: 100% !important;
-    }}
-    
-    /* Contenido dentro de los expanders */
-    [data-testid="stExpander"] > div {{
-        width: 100% !important;
-        max-width: {max_width}px !important;
-    }}
-    
-    /* Encabezados */
-    .st-emotion-cache-18ni7ap h1, 
-    .st-emotion-cache-18ni7ap h2, 
-    .st-emotion-cache-18ni7ap h3, 
-    .st-emotion-cache-18ni7ap h4, 
-    .st-emotion-cache-18ni7ap h5, 
-    .st-emotion-cache-18ni7ap h6 {{
-        font-size: 1.1rem;
-        margin-top: 0.4rem;
-        margin-bottom: 0.4rem;
-        font-weight: 600;
+    /* Estilos para encabezados */
+    h1, h2, h3, h4, h5, h6 {{
         text-align: center;
+        margin-top: 1rem;
+        margin-bottom: 1rem;
     }}
     
-    /* Estilos base para todos los botones */
-    .stButton button {{
+    h3:first-of-type {{
+        margin-top: 2rem;
+        padding-top: 1rem;
+    }}
+    
+    /* Estilos para botones */
+    .stButton > button {{
         border-radius: 6px;
         min-height: 2.5rem;
         padding: 0.5rem 1rem;
         font-size: 0.95rem;
-        margin-top: 0.3rem;
-        margin-bottom: 0.3rem;
-        touch-action: manipulation;
+        margin: 0.3rem auto;
         width: 100%;
         max-width: {max_width}px;
-        margin-left: auto;
-        margin-right: auto;
     }}
     
-    /* Estilo específico para el botón de captura */
-    [data-testid="baseButton-primary"] {{
-        background-color: #4CAF50 !important;
-        color: white !important;
-        font-size: 20px !important;
-        font-weight: bold !important;
-        height: 3.5em !important;
-        border-radius: 16px !important;
-        border: none !important;
-        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15) !important;
-        margin-top: 15px !important;
-        margin-bottom: 15px !important;
+    /* Botón principal de captura */
+    .stButton > [data-testid="baseButton-primary"] {{
+        background-color: var(--primary-color);
+        color: white;
+        font-size: 20px;
+        font-weight: bold;
+        height: 3.5em;
+        border-radius: 16px;
+        border: none;
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        margin: 15px auto;
         animation: pulse 2s infinite;
-        width: 100%;
-        max-width: {max_width}px;
-        margin-left: auto;
-        margin-right: auto;
     }}
     
     /* Botones de eliminar URL */
-    button[key^="delete_"] {{
-        background-color: #D87093 !important;
-        color: white !important;
-        border: none !important;
-        min-width: 40px !important;
-        min-height: 36px !important;
+    .stButton > button[key^="delete_"] {{
+        background-color: #D87093;
+        color: white;
+        border: none;
+        min-width: 40px;
+        min-height: 36px;
     }}
     
     /* Botones de descarga */
     button[key^="dl_"] {{
-        background-color: #4CAF50 !important;
-        color: white !important;
-        border: none !important;
-        font-weight: 600 !important;
-        width: 100% !important;
-        margin: 0.5rem auto !important;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
-        max-width: {max_width}px !important;
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        font-weight: 600;
+        width: 100%;
+        margin: 0.5rem auto;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        max-width: {max_width}px;
     }}
     
     /* Botón de descarga ZIP */
     button[key="dl_all"] {{
-        background-color: #4CAF50 !important;
-        color: white !important;
-        border: none !important;
-        font-weight: 600 !important;
-        font-size: 1.1rem !important;
-        padding: 0.75rem 1.5rem !important;
-        margin: 1rem auto !important;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
-        width: 100% !important;
-        max-width: {max_width}px !important;
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        font-weight: 600;
+        font-size: 1.1rem;
+        padding: 0.75rem 1.5rem;
+        margin: 1rem auto;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        width: 100%;
+        max-width: {max_width}px;
     }}
     
     /* Efectos hover */
-    [data-testid="baseButton-primary"]:hover {{
-        background-color: #45a049 !important;
-        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2) !important;
+    .stButton > [data-testid="baseButton-primary"]:hover {{
+        background-color: var(--primary-hover-color);
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
     }}
     
     button[key^="delete_"]:hover {{
-        background-color: #C76085 !important;
+        background-color: #C76085;
     }}
     
     button[key^="dl_"]:hover {{
-        background-color: #45a049 !important;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
+        background-color: var(--primary-hover-color);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
     }}
     
     button[key="dl_all"]:hover {{
-        background-color: #45a049 !important;
-        box-shadow: 0 6px 10px rgba(0, 0, 0, 0.2) !important;
+        background-color: var(--primary-hover-color);
+        box-shadow: 0 6px 10px rgba(0, 0, 0, 0.2);
         transform: translateY(-1px);
     }}
     
@@ -560,39 +510,92 @@ def main():
         100% {{ box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }}
     }}
     
-    /* Asegurar que los contenedores de resultados mantengan el ancho */
-    [data-testid="stVerticalBlock"] {{
-        max-width: {max_width}px !important;
-        margin: 0 auto !important;
-        width: 100% !important;
+    /* Contenedores y elementos */
+    div[data-testid="stVerticalBlock"] {{
+        max-width: {max_width}px;
+        margin: 0 auto;
+        width: 100%;
     }}
     
-    /* Contenedores de columnas */
-    [data-testid="column"] {{
-        width: 100% !important;
-        max-width: {max_width}px !important;
-        margin: 0 auto !important;
-        padding: 0 !important;
+    div[data-testid="column"] {{
+        padding: 0;
     }}
     
-    /* Centrar el área de texto */
-    .stTextArea textarea {{
-        width: 100% !important;
-        max-width: {max_width}px !important;
-        margin: 0 auto !important;
+    /* Áreas de texto y entradas */
+    .stTextArea > div > div > textarea {{
+        width: 100%;
+        max-width: {max_width}px;
+        margin: 0 auto;
     }}
     
-    /* Centrar los selectores múltiples */
+    /* Selectores múltiples */
     .stMultiSelect {{
-        max-width: {max_width}px !important;
-        margin: 0 auto !important;
+        max-width: {max_width}px;
+        margin: 0 auto;
     }}
-
-    /* Ajustar el contenedor de los botones de descarga */
+    
+    /* Componente de descarga */
     .stDownloadButton {{
-        width: 100% !important;
-        max-width: {max_width}px !important;
-        margin: 0 auto !important;
+        width: 100%;
+        max-width: {max_width}px;
+        margin: 0 auto;
+    }}
+    
+    /* Imágenes y expanders */
+    .stImage {{
+        max-width: {max_width}px;
+        margin: 0 auto;
+        width: 100%;
+    }}
+    
+    .stImage img {{
+        max-width: {max_width}px;
+        width: 100%;
+        margin: 0 auto;
+        display: block;
+    }}
+    
+    .stExpander {{
+        max-width: {max_width}px;
+        margin: 0 auto;
+        width: 100%;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Estilos adicionales para mejorar la experiencia en tablets
+    st.markdown("""
+    <style>
+    /* Mejorar multiselect para tablets */
+    .stMultiSelect span[data-baseweb="tag"] {{
+        height: 28px;
+        padding: 5px 8px;
+        margin: 4px 4px 4px 0;
+    }}
+    .stMultiSelect span[role="option"] {{
+        padding: 10px 8px;
+        font-size: 0.95rem;
+    }}
+    /* Iconos más grandes para mejor visibilidad en tablet */
+    .stMarkdown h3 svg, .stMarkdown h4 svg {{
+        vertical-align: middle;
+        margin-right: 0.5rem;
+        font-size: 1.2rem;
+    }}
+    /* Mejorar botones de eliminar en lista de URLs */
+    button.stButton[kind="secondary"] {{
+        min-width: 40px;
+        height: 40px;
+    }}
+    /* Mejorar contraste de métricas */
+    [data-testid="stMetricValue"] {{
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: #2E7D32;
+    }}
+    /* Mejorar campos de texto */
+    [data-testid="stTextArea"] {{
+        font-size: 16px;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -615,43 +618,6 @@ def main():
     if 'url_selector' not in st.session_state:
         st.session_state.url_selector = []
     
-    # Estilos adicionales para mejorar la experiencia en tablets
-    st.markdown("""
-    <style>
-    /* Mejorar multiselect para tablets */
-    .stMultiSelect span[data-baseweb="tag"] {
-        height: 28px;
-        padding: 5px 8px;
-        margin: 4px 4px 4px 0;
-    }
-    .stMultiSelect span[role="option"] {
-        padding: 10px 8px;
-        font-size: 0.95rem;
-    }
-    /* Iconos más grandes para mejor visibilidad en tablet */
-    .stMarkdown h3 svg, .stMarkdown h4 svg {
-        vertical-align: middle;
-        margin-right: 0.5rem;
-        font-size: 1.2rem;
-    }
-    /* Mejorar botones de eliminar en lista de URLs */
-    button.stButton[kind="secondary"] {
-        min-width: 40px;
-        height: 40px;
-    }
-    /* Mejorar contraste de métricas */
-    [data-testid="stMetricValue"] {
-        font-size: 1.2rem !important;
-        font-weight: 600 !important;
-        color: #2E7D32;
-    }
-    /* Mejorar campos de texto */
-    [data-testid="stTextArea"] {
-        font-size: 16px !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
     # Inicializar variables que se usarán más adelante
     devices = []
     custom_width = None
@@ -659,14 +625,6 @@ def main():
     
     # URL Input Section
     st.markdown("""
-    <style>
-    /* Añadir espacio al inicio de la página */
-    h3:first-of-type {
-        margin-top: 1rem !important;
-        padding-top: 1rem !important;
-    }
-    </style>
-    
     ### 🌐 Step 1: Add URLs to Capture
     Enter the URLs you want to capture screenshots of.
     """, unsafe_allow_html=True)

@@ -6,13 +6,23 @@ gatherUsageStats = false
 maxUploadSize = 200
 enableXsrfProtection = false
 enableCORS = false
+headless = true
 
 [client]
 showErrorDetails = true
+caching = true
+displayEnabled = true
 
 [theme]
-primaryColor = "#FF4B4B"
+primaryColor = "#4CAF50"
 backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#F0F2F6"
 textColor = "#262730"
-font = "sans serif" 
+font = "sans serif"
+
+[deprecation]
+showfileUploaderEncoding = false
+showPyplotGlobalUse = false
+
+[runner]
+fastReruns = true 
