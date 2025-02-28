@@ -370,10 +370,187 @@ def sanitize_filename(url):
     return url[:50]
 
 def main():
-    st.title("📸 Smart Screenshot Capture")
-    st.markdown("""
-    Capture screenshots of any website in different device sizes. Perfect for responsive design testing and documentation.
-    """)
+    # Parámetro para controlar el ancho máximo (se puede cambiar según necesidades)
+    max_width = 800
+    
+    # Ajustar ancho de la aplicación para landing page
+    st.markdown(f"""
+    <style>
+    /* Contenedor principal */
+    .reportview-container .main .block-container {{
+        max-width: {max_width}px;
+        padding-top: 0.5rem;
+        padding-bottom: 0.5rem;
+        margin: 0 auto;
+    }}
+    
+    /* Aplicación completa */
+    .stApp {{
+        max-width: 100%;
+        display: flex;
+        justify-content: center;
+    }}
+    
+    /* Contenedor principal de Streamlit */
+    .main > div:first-child {{
+        max-width: {max_width}px !important;
+        margin: 0 auto !important;
+        padding: 0 1rem !important;
+    }}
+    
+    /* Centrar todos los elementos */
+    .element-container, 
+    .stMarkdown,
+    .stButton,
+    .stTextArea,
+    [data-testid="stVerticalBlock"],
+    [data-testid="stHorizontalBlock"],
+    .stMetric {{
+        max-width: {max_width}px !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+    }}
+    
+    /* Expanders y sus contenedores */
+    .streamlit-expanderHeader,
+    .stExpander,
+    [data-testid="stExpander"] {{
+        max-width: {max_width}px !important;
+        margin: 0 auto !important;
+        width: 100% !important;
+    }}
+    
+    /* Contenedor de imágenes */
+    .stImage {{
+        max-width: {max_width}px !important;
+        margin: 0 auto !important;
+        width: 100% !important;
+    }}
+    
+    /* Imágenes dentro de los resultados */
+    .stImage img {{
+        max-width: {max_width}px !important;
+        width: 100% !important;
+        margin: 0 auto !important;
+        display: block !important;
+    }}
+    
+    /* Pestañas y sus contenedores */
+    .stTabs [data-baseweb="tab-list"],
+    .stTabs [data-baseweb="tab-panel"] {{
+        max-width: {max_width}px !important;
+        margin: 0 auto !important;
+        width: 100% !important;
+    }}
+    
+    /* Contenido dentro de los expanders */
+    [data-testid="stExpander"] > div {{
+        width: 100% !important;
+        max-width: {max_width}px !important;
+    }}
+    
+    /* Encabezados */
+    .st-emotion-cache-18ni7ap h1, 
+    .st-emotion-cache-18ni7ap h2, 
+    .st-emotion-cache-18ni7ap h3, 
+    .st-emotion-cache-18ni7ap h4, 
+    .st-emotion-cache-18ni7ap h5, 
+    .st-emotion-cache-18ni7ap h6 {{
+        font-size: 1.1rem;
+        margin-top: 0.4rem;
+        margin-bottom: 0.4rem;
+        font-weight: 600;
+        text-align: center;
+    }}
+    
+    /* Estilos base para todos los botones */
+    .stButton button {{
+        border-radius: 6px;
+        min-height: 2.5rem;
+        padding: 0.5rem 1rem;
+        font-size: 0.95rem;
+        margin-top: 0.3rem;
+        margin-bottom: 0.3rem;
+        touch-action: manipulation;
+        width: 100%;
+        max-width: {max_width}px;
+        margin-left: auto;
+        margin-right: auto;
+    }}
+    
+    /* Estilo específico para el botón de captura */
+    [data-testid="baseButton-primary"] {{
+        background-color: #4CAF50 !important;
+        color: white !important;
+        font-size: 20px !important;
+        font-weight: bold !important;
+        height: 3.5em !important;
+        border-radius: 16px !important;
+        border: none !important;
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15) !important;
+        margin-top: 15px !important;
+        margin-bottom: 15px !important;
+        animation: pulse 2s infinite;
+        width: 100%;
+        max-width: {max_width}px;
+        margin-left: auto;
+        margin-right: auto;
+    }}
+    
+    /* Botones de eliminar URL */
+    button[key^="delete_"] {{
+        background-color: #D87093 !important;
+        color: white !important;
+        border: none !important;
+        min-width: 40px !important;
+        min-height: 36px !important;
+    }}
+    
+    /* Efectos hover */
+    [data-testid="baseButton-primary"]:hover {{
+        background-color: #45a049 !important;
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2) !important;
+    }}
+    
+    button[key^="delete_"]:hover {{
+        background-color: #C76085 !important;
+    }}
+    
+    /* Animación de pulso */
+    @keyframes pulse {{
+        0% {{ box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.4); }}
+        70% {{ box-shadow: 0 0 0 10px rgba(76, 175, 80, 0); }}
+        100% {{ box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }}
+    }}
+    
+    /* Asegurar que los contenedores de resultados mantengan el ancho */
+    [data-testid="stVerticalBlock"] {{
+        max-width: {max_width}px !important;
+        margin: 0 auto !important;
+        width: 100% !important;
+    }}
+    
+    /* Contenedores de columnas */
+    [data-testid="column"] {{
+        width: 100% !important;
+        max-width: {max_width}px !important;
+        margin: 0 auto !important;
+    }}
+    
+    /* Centrar el área de texto */
+    .stTextArea textarea {{
+        width: 100% !important;
+        max-width: {max_width}px !important;
+        margin: 0 auto !important;
+    }}
+    
+    /* Centrar los selectores múltiples */
+    .stMultiSelect {{
+        max-width: {max_width}px !important;
+        margin: 0 auto !important;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
     
     # Inicializar session_state
     if 'temp_dir' not in st.session_state:
@@ -388,158 +565,140 @@ def main():
         st.session_state.selected_urls_set = set()
     if 'manual_urls' not in st.session_state:
         st.session_state.manual_urls = set()
+    if 'manual_urls_input' not in st.session_state:
+        st.session_state.manual_urls_input = ""
     if 'url_selector' not in st.session_state:
         st.session_state.url_selector = []
     
+    # Estilos adicionales para mejorar la experiencia en tablets
+    st.markdown("""
+    <style>
+    /* Mejorar multiselect para tablets */
+    .stMultiSelect span[data-baseweb="tag"] {
+        height: 28px;
+        padding: 5px 8px;
+        margin: 4px 4px 4px 0;
+    }
+    .stMultiSelect span[role="option"] {
+        padding: 10px 8px;
+        font-size: 0.95rem;
+    }
+    /* Iconos más grandes para mejor visibilidad en tablet */
+    .stMarkdown h3 svg, .stMarkdown h4 svg {
+        vertical-align: middle;
+        margin-right: 0.5rem;
+        font-size: 1.2rem;
+    }
+    /* Mejorar botones de eliminar en lista de URLs */
+    button.stButton[kind="secondary"] {
+        min-width: 40px;
+        height: 40px;
+    }
+    /* Mejorar contraste de métricas */
+    [data-testid="stMetricValue"] {
+        font-size: 1.2rem !important;
+        font-weight: 600 !important;
+        color: #2E7D32;
+    }
+    /* Mejorar campos de texto */
+    [data-testid="stTextArea"] {
+        font-size: 16px !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Inicializar variables que se usarán más adelante
+    devices = []
+    custom_width = None
+    custom_height = None
+    
     # URL Input Section
     st.markdown("""
-    ### 🌐 Step 1: Enter Main Website URL
-    Enter the main URL of the website you want to analyze. The tool will automatically extract all accessible URLs from this website.
-    """)
+    <style>
+    /* Añadir espacio al inicio de la página */
+    h3:first-of-type {
+        margin-top: 1rem !important;
+        padding-top: 1rem !important;
+    }
+    </style>
     
-    base_url = st.text_input(
-        "Enter website URL:",
-        help="Enter the main URL of the website you want to analyze. Example: https://www.example.com",
-        placeholder="https://www.example.com"
+    ### 🌐 Step 1: Add URLs to Capture
+    Enter the URLs you want to capture screenshots of.
+    """, unsafe_allow_html=True)
+    
+    # Campo de texto para ingresar URLs manualmente (ahora acepta múltiples líneas)
+    manual_urls_input = st.text_area(
+        "Enter URLs (one per line):",
+        value=st.session_state.manual_urls_input,
+        placeholder="https://www.example.com\nhttps://www.example.com/about-us",
+        help="Enter complete URLs including http:// or https://"
     )
     
-    # Extract URLs button
-    if st.button("🔍 Extract URLs", help="Click to extract main URLs from the website"):
-        with st.spinner("Extracting URLs... This may take a moment."):
-            if base_url:
-                if not base_url.startswith(('http://', 'https://')):
-                    base_url = 'https://' + base_url
-                extracted = extract_urls(base_url)
-                st.session_state.extracted_urls = extracted
-                if extracted:
-                    st.success(f"Found {len(extracted)} URLs!")
-                else:
-                    st.warning("No URLs found. You can add URLs manually using the form below.")
-    
-    # Show extracted URLs
-    if st.session_state.extracted_urls or st.session_state.manual_urls:
-        st.markdown("""
-        ### 🎯 Step 2: Select URLs to Capture
-        Choose which URLs you want to capture screenshots of. You can select multiple URLs at once.
-        """)
-        
-        # Combinar URLs extraídas y manuales
-        all_available_urls = sorted(list(set(st.session_state.extracted_urls).union(st.session_state.manual_urls)))
-        
-        # URL selection with improved display
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            selected_urls = st.multiselect(
-                "Select URLs to capture:",
-                options=all_available_urls,
-                default=[],
-                help="Select the URLs you want to capture screenshots of.",
-                format_func=lambda x: x,
-                placeholder="Choose URLs to capture..."
-            )
+    add_button = st.button("➕ Add URLs", help="Add these URLs to the list", key="add_urls", use_container_width=True)
+    if add_button:
+        if manual_urls_input:
+            # Procesar múltiples URLs (una por línea)
+            urls_to_add = [url.strip() for url in manual_urls_input.split('\n') if url.strip()]
             
-            # Actualizar el estado directamente
-            st.session_state.selected_urls = selected_urls
-            st.session_state.selected_urls_set = set(selected_urls)
-        
-        # Show selected URLs count
-        with col2:
-            st.metric(
-                "Selected URLs",
-                len(selected_urls),
-                help="Number of URLs currently selected for capture"
-            )
-            
-            # Botón para limpiar selección
-            if st.button("Clear Selection", help="Remove all selected URLs"):
-                st.session_state.selected_urls = []
-                st.session_state.selected_urls_set = set()
-                st.rerun()
-    
-    # Sección para añadir URLs manualmente
-    st.markdown("""
-    ### ✍️ Or Add URLs Manually (Optional)
-    If some URLs were not automatically extracted or you want to add specific pages, 
-    you can manually add them here.
-    """)
-    
-    with st.expander("Add URLs manually", expanded=not bool(st.session_state.extracted_urls)):
-        st.markdown("""
-        Enter complete URLs including http:// or https://. Examples:
-        - https://www.example.com/products
-        - https://www.example.com/about-us
-        """)
-        
-        # Campo de texto para ingresar URLs manualmente
-        manual_url = st.text_input(
-            "Enter URL:",
-            placeholder="https://www.example.com/page",
-            help="Enter a complete URL including https:// or http://"
-        )
-        
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            if st.button("Add URL", help="Add this URL to the list"):
-                if manual_url:
-                    # Asegurar que la URL comience con http:// o https://
-                    if not manual_url.startswith(('http://', 'https://')):
-                        manual_url = 'https://' + manual_url
-                    
-                    # Añadir la URL directamente a las URLs manuales y seleccionadas
-                    st.session_state.manual_urls.add(manual_url)
-                    st.session_state.selected_urls_set.add(manual_url)
-                    st.session_state.selected_urls = list(st.session_state.selected_urls_set)
-                    st.success(f"Added: {manual_url}")
-                    st.rerun()
-                else:
-                    st.warning("Please enter a valid URL")
-        
-        with col2:
-            if st.button("Clear All", help="Remove all manually added URLs"):
-                st.session_state.manual_urls.clear()
-                # Actualizar las URLs seleccionadas
-                st.session_state.selected_urls_set = set(url for url in st.session_state.selected_urls_set 
-                                                       if url not in st.session_state.manual_urls)
-                st.session_state.selected_urls = list(st.session_state.selected_urls_set)
-                st.rerun()
-        
-        # Mostrar las URLs añadidas manualmente
-        if st.session_state.manual_urls:
-            st.markdown("#### Manually Added URLs:")
-            for url in sorted(st.session_state.manual_urls):
-                col1, col2 = st.columns([4, 1])
-                with col1:
-                    st.write(f"• {url}")
-                with col2:
-                    if st.button("🗑️", key=f"delete_{url}", help=f"Remove {url}"):
-                        st.session_state.manual_urls.remove(url)
-                        st.session_state.selected_urls_set.discard(url)
-                        st.session_state.selected_urls = list(st.session_state.selected_urls_set)
-                        st.rerun()
-    
-    # Display selected URLs in a more readable format
-    if hasattr(st.session_state, 'selected_urls') and st.session_state.selected_urls:
-        with st.expander("Selected URLs for Capture", expanded=True):
-            st.markdown("#### URLs that will be captured:")
-            for i, url in enumerate(st.session_state.selected_urls, 1):
-                st.write(f"{i}. {url}")
+            for manual_url in urls_to_add:
+                # Asegurar que la URL comience con http:// o https://
+                if not manual_url.startswith(('http://', 'https://')):
+                    manual_url = 'https://' + manual_url
                 
-            # Mostrar instrucciones de uso
-            if len(st.session_state.selected_urls) > 0:
-                st.info("""
-                💡 **Tips for URL Selection:**
-                - You can select/deselect multiple URLs at once
-                - Use the search box to filter URLs
-                - Click 'Clear Selection' to start over
-                - Add missing URLs manually using the form above
-                """)
+                # Añadir la URL directamente a las URLs manuales y seleccionadas
+                st.session_state.manual_urls.add(manual_url)
+                st.session_state.selected_urls_set.add(manual_url)
+            
+            st.session_state.selected_urls = list(st.session_state.selected_urls_set)
+            st.success(f"Added {len(urls_to_add)} URLs!")
+            # Limpiar el input después de añadir
+            st.session_state.manual_urls_input = ""
+            st.rerun()
+        else:
+            st.warning("Please enter at least one valid URL")
+
+    clear_button = st.button("🗑️ Clear All", help="Remove all manually added URLs", key="clear_all", use_container_width=True)
+    if clear_button:
+        st.session_state.manual_urls.clear()
+        # Actualizar las URLs seleccionadas
+        st.session_state.selected_urls_set = set(url for url in st.session_state.selected_urls_set 
+                                           if url not in st.session_state.manual_urls)
+        st.session_state.selected_urls = list(st.session_state.selected_urls_set)
+        st.rerun()
     
-    # Device selection with detailed help
+    # Mostrar las URLs añadidas manualmente
+    if st.session_state.manual_urls:
+        st.markdown("#### Added URLs:")
+        url_list = sorted(st.session_state.manual_urls)
+        for i, url in enumerate(url_list):
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.write(f"{i+1}. {url}")
+            with col2:
+                delete_button = st.button("🗑️", key=f"delete_{url}", help=f"Remove {url}")
+                if delete_button:
+                    st.session_state.manual_urls.remove(url)
+                    st.session_state.selected_urls_set.discard(url)
+                    st.session_state.selected_urls = list(st.session_state.selected_urls_set)
+                    st.rerun()
+        
+        # Automáticamente seleccionar todas las URLs añadidas
+        st.session_state.selected_urls = list(st.session_state.manual_urls)
+        st.session_state.selected_urls_set = set(st.session_state.manual_urls)
+        
+        # Mostrar el número de URLs seleccionadas
+        st.metric(
+            "URLs to capture",
+            len(st.session_state.selected_urls),
+            help="Number of URLs that will be captured"
+        )
+    
+    # Device selection with detailed help - ahora se convierte en Step 2
     st.markdown("""
-    ### 📱 Step 3: Configure Device Settings
+    ### 📱 Step 2: Configure Device Settings
     Choose which device types you want to capture screenshots for. Each URL will be captured in all selected device sizes.
     """)
-    
+
     devices = st.multiselect(
         "Select devices:",
         ["desktop", "mobile", "tablet", "custom"],
@@ -552,10 +711,8 @@ def main():
         - Custom: Define your own dimensions
         """
     )
-    
+
     # Custom device configuration
-    custom_width = None
-    custom_height = None
     if "custom" in devices:
         st.markdown("""
         #### Custom Device Settings
@@ -577,31 +734,8 @@ def main():
                 help="Minimum height is 600px"
             )
     
-    # Advanced options in an expander
-    with st.expander("ℹ️ Tips & Information"):
-        st.markdown("""
-        ### Usage Tips
-        - URLs are automatically extracted from the main website
-        - Select the specific URLs you want to capture
-        - The tool will automatically handle cookies and pop-ups
-        - For best results, wait until all screenshots are processed
-        
-        ### Supported Features
-        - URL extraction and filtering
-        - Multi-device capture
-        - Cookie consent handling
-        - Pop-up management
-        - Full page screenshots
-        - Batch processing
-        
-        ### Output
-        - Screenshots are saved in PNG format
-        - Download individual images or all as ZIP
-        - Images are named using the website's URL and device type
-        """)
-    
     # Capture button
-    if st.button("📸 Capture Screenshots", help="Click to start capturing screenshots of selected URLs"):
+    if st.button("📸 Capture Screenshots", help="Click to start capturing screenshots of selected URLs", key="capture-button", type="primary", use_container_width=True):
         if not st.session_state.selected_urls and not st.session_state.manual_urls:
             st.warning("Please select at least one URL to capture screenshots.")
             return
@@ -644,6 +778,11 @@ def main():
             status_container.empty()
             progress_container.empty()
             message_container.empty()
+            
+            # Show celebration balloons after successful capture
+            if st.session_state.screenshot_paths:
+                st.success("¡Screenshots captured successfully! 🎉")
+                st.balloons()
     
     # Show results if there are screenshots
     if st.session_state.screenshot_paths:
