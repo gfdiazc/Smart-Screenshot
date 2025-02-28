@@ -464,7 +464,7 @@ def main():
     }}
     
     /* Estilos base para todos los botones */
-    .stButton button {{
+    .stButton button {
         border-radius: 6px;
         min-height: 2.5rem;
         padding: 0.5rem 1rem;
@@ -476,10 +476,10 @@ def main():
         max-width: {max_width}px;
         margin-left: auto;
         margin-right: auto;
-    }}
+    }
     
     /* Estilo específico para el botón de captura */
-    [data-testid="baseButton-primary"] {{
+    [data-testid="baseButton-primary"] {
         background-color: #4CAF50 !important;
         color: white !important;
         font-size: 20px !important;
@@ -495,26 +495,62 @@ def main():
         max-width: {max_width}px;
         margin-left: auto;
         margin-right: auto;
-    }}
+    }
     
     /* Botones de eliminar URL */
-    button[key^="delete_"] {{
+    button[key^="delete_"] {
         background-color: #D87093 !important;
         color: white !important;
         border: none !important;
         min-width: 40px !important;
         min-height: 36px !important;
-    }}
+    }
+    
+    /* Botones de descarga */
+    button[key^="dl_"] {
+        background-color: #4CAF50 !important;
+        color: white !important;
+        border: none !important;
+        font-weight: 600 !important;
+        width: 100% !important;
+        margin: 0.5rem auto !important;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+    }
+    
+    /* Botón de descarga ZIP */
+    button[key="dl_all"] {
+        background-color: #4CAF50 !important;
+        color: white !important;
+        border: none !important;
+        font-weight: 600 !important;
+        font-size: 1.1rem !important;
+        padding: 0.75rem 1.5rem !important;
+        margin: 1rem auto !important;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+        max-width: 400px !important;
+        display: block !important;
+    }
     
     /* Efectos hover */
-    [data-testid="baseButton-primary"]:hover {{
+    [data-testid="baseButton-primary"]:hover {
         background-color: #45a049 !important;
         box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2) !important;
-    }}
+    }
     
-    button[key^="delete_"]:hover {{
+    button[key^="delete_"]:hover {
         background-color: #C76085 !important;
-    }}
+    }
+    
+    button[key^="dl_"]:hover {
+        background-color: #45a049 !important;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
+    }
+    
+    button[key="dl_all"]:hover {
+        background-color: #45a049 !important;
+        box-shadow: 0 6px 10px rgba(0, 0, 0, 0.2) !important;
+        transform: translateY(-1px);
+    }
     
     /* Animación de pulso */
     @keyframes pulse {{
