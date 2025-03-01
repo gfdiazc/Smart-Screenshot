@@ -662,11 +662,40 @@ def main():
 
     clear_button = st.button("🗑️ Clear All", help="Remove all manually added URLs", key="clear_all", use_container_width=True)
     if clear_button:
+        # Limpiar URLs manuales
         st.session_state.manual_urls.clear()
+        
         # Actualizar las URLs seleccionadas
         st.session_state.selected_urls_set = set(url for url in st.session_state.selected_urls_set 
                                            if url not in st.session_state.manual_urls)
         st.session_state.selected_urls = list(st.session_state.selected_urls_set)
+        
+        # Limpiar screenshots y archivos temporales
+        if st.session_state.screenshot_paths:
+            # Eliminar archivos físicos
+            for path in st.session_state.screenshot_paths:
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                except Exception as e:
+                    st.warning(f"No se pudo eliminar el archivo {path}: {str(e)}")
+            
+            # Eliminar archivo ZIP si existe
+            if st.session_state.temp_dir:
+                zip_path = os.path.join(st.session_state.temp_dir, "screenshots.zip")
+                if os.path.exists(zip_path):
+                    try:
+                        os.remove(zip_path)
+                    except Exception as e:
+                        st.warning(f"No se pudo eliminar el archivo ZIP: {str(e)}")
+            
+            # Limpiar la lista de rutas
+            st.session_state.screenshot_paths = []
+            
+            # Resetear el directorio temporal
+            st.session_state.temp_dir = None
+            
+        st.success("All data has been cleared!")
         st.rerun()
     
     # Mostrar las URLs añadidas manualmente
